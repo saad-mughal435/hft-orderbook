@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "book/book_set.hpp"
+#include "core/cpu.hpp"
 #include "feed/moldudp64.hpp"
 #include "feed/synthetic.hpp"
 #include "feed/udp.hpp"
@@ -32,7 +33,7 @@ void print_stats(const MoldSession& s, const BookSet& b) {
 
 int main(int argc, char** argv) {
     bool self = false, listen = false;
-    long n = 20000, port = 0, ms = 2000;
+    long n = 20000, port = 0, ms = 2000, pin = -1;
 
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -44,9 +45,16 @@ int main(int argc, char** argv) {
             port   = std::strtol(argv[++i], nullptr, 10);
         } else if (a == "--ms" && i + 1 < argc) {
             ms = std::strtol(argv[++i], nullptr, 10);
+        } else if (a == "--pin" && i + 1 < argc) {
+            pin = std::strtol(argv[++i], nullptr, 10);
         }
     }
     if (!self && !listen) self = true;
+
+    if (pin >= 0) {  // pin the receive thread to a core (isolcpus in production)
+        const bool ok = pin_this_thread(static_cast<unsigned>(pin));
+        std::cerr << "pin to core " << pin << ": " << (ok ? "ok" : "unsupported") << "\n";
+    }
 
     if (self) {
         const std::vector<std::uint8_t> framed =

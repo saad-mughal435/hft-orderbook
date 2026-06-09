@@ -54,7 +54,7 @@ if(UNIX)
   target_link_libraries(wsbook PRIVATE hftob Threads::Threads)
 
   add_executable(mdrecv apps/mdrecv.cpp)
-  target_link_libraries(mdrecv PRIVATE hftob)
+  target_link_libraries(mdrecv PRIVATE hftob Threads::Threads)  # pthread for core pinning
 endif()
 
 # ---- benchmarks (opt-in: -DHFTOB_BUILD_BENCH=ON) --------------------------
@@ -108,6 +108,7 @@ if(HFTOB_BUILD_TESTS)
     tests/sha1_tests.cpp
     tests/fix_tests.cpp
     tests/moldudp64_tests.cpp
+    tests/cpu_tests.cpp
     tests/spsc_tests.cpp
     tests/pipeline_tests.cpp
     tests/sharded_tests.cpp

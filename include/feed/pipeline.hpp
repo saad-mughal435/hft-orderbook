@@ -6,6 +6,7 @@
 #include <thread>
 
 #include "book/order_book.hpp"
+#include "core/cpu.hpp"
 #include "core/spsc_ring.hpp"
 #include "feed/framing.hpp"
 #include "itch/decoder.hpp"
@@ -42,7 +43,7 @@ inline std::size_t replay_pipelined(const std::uint8_t* buf, std::size_t len,
 
     std::thread producer([&] {
         for_each_framed_message(buf, len, [&](const itch::Message& m) {
-            while (!ring.push(m)) std::this_thread::yield();  // back-pressure on full
+            while (!ring.push(m)) cpu_relax();  // busy-spin with a pause hint on full
         });
         producing.store(false, std::memory_order_release);    // signal: no more pushes
     });
@@ -60,7 +61,7 @@ inline std::size_t replay_pipelined(const std::uint8_t* buf, std::size_t len,
             book.apply(m);
             ++applied;
         } else {
-            std::this_thread::yield();  // ring momentarily empty, producer still live
+            cpu_relax();  // ring momentarily empty, producer still live: busy-spin
         }
     }
 

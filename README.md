@@ -88,9 +88,15 @@ across runs (an earlier run had flat ~25% slower — the flat vector pays an O(n
 walks across many levels). That instability is the point of reporting **same-run** numbers: the engine
 ships all three, parity-tested (`map ≡ flat ≡ windowed`), so the trade-offs are *measured*, not assumed.
 
+A full **decode + book apply is well under 100 ns** on this runner — sub-microsecond per message.
+The hot path is allocation-free (object pool + reserved index), integer-priced, branch-light, and
+cache-line-disciplined; the lock-free ring busy-waits with `PAUSE` (`cpu_relax`), and the engine
+exposes `rdtsc` + `pin_this_thread` for a pinned bare-metal deployment. See
+**[`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)** for the hot-path design and the measurement method.
+
 > These are **relative, same-runner** figures on virtualized CI hardware — fair for an A/B, not HFT
-> numbers. Absolute p50/p99/p999 require pinning threads on bare metal; the method is documented —
-> run it on a real box. No fabricated figures here.
+> numbers. Absolute p50/p99/p999 require pinning threads on bare metal (isolcpus, fixed TSC) — the
+> method is documented; run it on a real box. No fabricated figures here.
 
 ## Analytics & live view
 
