@@ -40,17 +40,26 @@ inline void stock8(std::vector<std::uint8_t>& b) {
 }  // namespace detail
 
 /// Build a deterministic synthetic NASDAQ ITCH 5.0 byte stream of `n_messages`
-/// back-to-back messages: a random walk that adds resting orders and then
-/// executes / cancels / deletes / replaces them against a live pool, so the
-/// `order_ref` map stays populated — realistic load for benchmarking the hot
-/// path. The same `seed` always yields identical bytes, so benchmarks and the
-/// replay demo are reproducible. The stream carries no BinaryFILE length prefix;
-/// messages are self-describing by type, matching `for_each_message`.
+/// messages: a random walk that adds resting orders and then executes / cancels /
+/// deletes / replaces them against a live pool, so the `order_ref` map stays
+/// populated — realistic load for benchmarking the hot path. The same `seed`
+/// always yields identical bytes, so benchmarks and the replay demo are
+/// reproducible. The stream is **BinaryFILE-framed** (each message preceded by a
+/// 2-byte big-endian length), matching real NASDAQ daily captures and read by
+/// `for_each_framed_message`.
 inline std::vector<std::uint8_t> make_synthetic_itch(std::size_t n_messages,
                                                      std::uint32_t seed = 1) {
     using namespace detail;
     std::vector<std::uint8_t> b;
-    b.reserve(n_messages * 36);
+    b.reserve(n_messages * 38);          // ~36-byte body + 2-byte length prefix
+
+    std::vector<std::uint8_t> m;         // scratch for one message body
+    m.reserve(64);
+    auto frame = [&]() {                 // emit BinaryFILE 2-byte BE length + body
+        be16(b, static_cast<std::uint16_t>(m.size()));
+        b.insert(b.end(), m.begin(), m.end());
+        m.clear();
+    };
 
     std::mt19937 rng(seed);
     auto pct = [&](int hi) {
@@ -74,12 +83,13 @@ inline std::vector<std::uint8_t> make_synthetic_itch(std::size_t n_messages,
         const std::uint64_t ref    = next_ref++;
         const std::uint32_t shares = static_cast<std::uint32_t>(10 + pct(990));
         const std::int64_t  px     = add_px(side);
-        hdr(b, 'A', 1, ts);
-        be_n(b, ref, 8);
-        b.push_back(static_cast<std::uint8_t>(side));
-        be32(b, shares);
-        stock8(b);
-        be32(b, static_cast<std::uint32_t>(px));
+        hdr(m, 'A', 1, ts);
+        be_n(m, ref, 8);
+        m.push_back(static_cast<std::uint8_t>(side));
+        be32(m, shares);
+        stock8(m);
+        be32(m, static_cast<std::uint32_t>(px));
+        frame();
         live.emplace_back(ref, side);
     };
     auto pick = [&]() { return static_cast<std::size_t>(rng() % live.size()); };
@@ -100,30 +110,34 @@ inline std::vector<std::uint8_t> make_synthetic_itch(std::size_t n_messages,
             emit_add();
         } else if (roll < 70) {                  // execute
             const std::size_t i = pick();
-            hdr(b, 'E', 1, ts);
-            be_n(b, live[i].first, 8);
-            be32(b, static_cast<std::uint32_t>(1 + pct(20)));
-            be_n(b, emitted, 8);                 // match number
+            hdr(m, 'E', 1, ts);
+            be_n(m, live[i].first, 8);
+            be32(m, static_cast<std::uint32_t>(1 + pct(20)));
+            be_n(m, emitted, 8);                 // match number
+            frame();
         } else if (roll < 82) {                  // cancel (partial)
             const std::size_t i = pick();
-            hdr(b, 'X', 1, ts);
-            be_n(b, live[i].first, 8);
-            be32(b, static_cast<std::uint32_t>(1 + pct(20)));
+            hdr(m, 'X', 1, ts);
+            be_n(m, live[i].first, 8);
+            be32(m, static_cast<std::uint32_t>(1 + pct(20)));
+            frame();
         } else if (roll < 92) {                  // delete
             const std::size_t i = pick();
-            hdr(b, 'D', 1, ts);
-            be_n(b, live[i].first, 8);
+            hdr(m, 'D', 1, ts);
+            be_n(m, live[i].first, 8);
+            frame();
             live[i] = live.back();               // swap-pop
             live.pop_back();
         } else {                                 // replace (reprice/resize)
             const std::size_t i    = pick();
             const char        side = live[i].second;
             const std::uint64_t nref = next_ref++;
-            hdr(b, 'U', 1, ts);
-            be_n(b, live[i].first, 8);           // original ref
-            be_n(b, nref, 8);                    // new ref
-            be32(b, static_cast<std::uint32_t>(10 + pct(990)));
-            be32(b, static_cast<std::uint32_t>(add_px(side)));
+            hdr(m, 'U', 1, ts);
+            be_n(m, live[i].first, 8);           // original ref
+            be_n(m, nref, 8);                    // new ref
+            be32(m, static_cast<std::uint32_t>(10 + pct(990)));
+            be32(m, static_cast<std::uint32_t>(add_px(side)));
+            frame();
             live[i] = {nref, side};
         }
         ts += 1 + static_cast<std::uint64_t>(pct(1000));

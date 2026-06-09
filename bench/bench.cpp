@@ -20,13 +20,16 @@
 
 using namespace hftob;
 
-// Decode a single ITCH AddOrder, repeatedly.
+// Decode a single ITCH AddOrder, repeatedly. make_synthetic_itch is BinaryFILE-
+// framed, so skip the 2-byte length prefix and decode the body.
 static void BM_Decode(benchmark::State& state) {
-    const std::vector<std::uint8_t> buf  = make_synthetic_itch(1, 7);  // 1 AddOrder
-    const std::size_t               mlen = itch::message_length(static_cast<char>(buf[0]));
+    const std::vector<std::uint8_t> buf  = make_synthetic_itch(1, 7);  // [len][AddOrder]
+    const std::size_t               mlen = (static_cast<std::size_t>(buf[0]) << 8) |
+                                           static_cast<std::size_t>(buf[1]);
+    const std::uint8_t*             body = buf.data() + 2;
     itch::Message                   m;
     for (auto _ : state) {
-        benchmark::DoNotOptimize(itch::decode(buf.data(), mlen, m));
+        benchmark::DoNotOptimize(itch::decode(body, mlen, m));
         benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(state.iterations());

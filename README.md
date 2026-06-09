@@ -49,6 +49,8 @@ NASDAQ publishes full-day TotalView-ITCH 5.0 samples (≈ 3.5–5.6 GB each, no 
 `https://emi.nasdaq.com/ITCH/Nasdaq ITCH/` as `MMDDYYYY.NASDAQ_ITCH50.gz`. Those are **not**
 committed; instead the repo ships a deterministic synthetic-capture generator (`gencap`) and an
 `obreplay --synthetic N` mode for tests and the demo, and `obreplay` can be pointed at a real `.gz`.
+Both the real files and the synthetic generator use the **BinaryFILE** layout — every message is
+preceded by a 2-byte big-endian length — which the engine deframes (`feed/framing.hpp`).
 
 ```bash
 ./build/obreplay --synthetic 1000000      # replay 1M generated messages

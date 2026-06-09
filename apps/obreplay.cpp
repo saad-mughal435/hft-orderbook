@@ -104,16 +104,17 @@ int main(int argc, char** argv) {
     {
         OrderBook   b2;
         std::size_t off = 0;
-        while (off < data.size()) {
-            const std::size_t mlen = itch::message_length(static_cast<char>(data[off]));
-            if (mlen == 0 || off + mlen > data.size()) break;
+        while (off + 2 <= data.size()) {
+            const std::size_t mlen = (static_cast<std::size_t>(data[off]) << 8) |
+                                     static_cast<std::size_t>(data[off + 1]);
+            if (mlen == 0 || off + 2 + mlen > data.size()) break;
             itch::Message m;
             const auto s0 = Clock::now();
-            if (itch::decode(data.data() + off, mlen, m)) b2.apply(m);
+            if (itch::decode(data.data() + off + 2, mlen, m)) b2.apply(m);
             const auto s1 = Clock::now();
             hist.add(static_cast<std::uint64_t>(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(s1 - s0).count()));
-            off += mlen;
+            off += 2 + mlen;
         }
     }
 

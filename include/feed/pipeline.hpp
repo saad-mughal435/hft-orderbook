@@ -7,35 +7,19 @@
 
 #include "book/order_book.hpp"
 #include "core/spsc_ring.hpp"
+#include "feed/framing.hpp"
 #include "itch/decoder.hpp"
 #include "itch/messages.hpp"
 
 namespace hftob {
 
-/// Walk a contiguous ITCH 5.0 byte stream, decoding each message by its
-/// type-derived length and invoking `sink(const itch::Message&)` for every
-/// message that decodes. Stops at the first unrecognised type or a truncated
-/// tail (both are returned as "bytes consumed < len"). Returns the number of
-/// bytes consumed. ITCH messages are self-describing — the type byte determines
-/// the length — so no external framing is needed for a back-to-back stream.
-template <typename Sink>
-std::size_t for_each_message(const std::uint8_t* buf, std::size_t len, Sink&& sink) {
-    std::size_t off = 0;
-    while (off < len) {
-        const std::size_t mlen = itch::message_length(static_cast<char>(buf[off]));
-        if (mlen == 0 || off + mlen > len) break;  // unknown type or truncated tail
-        itch::Message m;
-        if (itch::decode(buf + off, mlen, m)) sink(m);
-        off += mlen;
-    }
-    return off;
-}
-
-/// Reference path: decode and apply on the calling thread. Returns messages applied.
+/// Reference path: decode and apply on the calling thread. The input is a
+/// BinaryFILE-framed ITCH 5.0 stream (see `for_each_framed_message`). Returns
+/// the number of messages applied.
 inline std::size_t replay_single_threaded(const std::uint8_t* buf, std::size_t len,
                                           OrderBook& book) {
     std::size_t n = 0;
-    for_each_message(buf, len, [&](const itch::Message& m) {
+    for_each_framed_message(buf, len, [&](const itch::Message& m) {
         book.apply(m);
         ++n;
     });
@@ -57,7 +41,7 @@ inline std::size_t replay_pipelined(const std::uint8_t* buf, std::size_t len,
     std::atomic<bool> producing{true};
 
     std::thread producer([&] {
-        for_each_message(buf, len, [&](const itch::Message& m) {
+        for_each_framed_message(buf, len, [&](const itch::Message& m) {
             while (!ring.push(m)) std::this_thread::yield();  // back-pressure on full
         });
         producing.store(false, std::memory_order_release);    // signal: no more pushes
