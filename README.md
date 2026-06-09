@@ -6,8 +6,8 @@ same engine also runs against **MetaTrader 5** (live ticks in / orders out).
 
 [![CI](https://github.com/saad-mughal435/hft-orderbook/actions/workflows/ci.yml/badge.svg)](https://github.com/saad-mughal435/hft-orderbook/actions/workflows/ci.yml)
 
-> **Status: in progress.** ITCH 5.0 decoder ✅ · order-book reconstructor · lock-free SPSC
-> pipeline · benchmarks + replay · MT5 bridge — built phase by phase, each verified in CI.
+> **Status: feature-complete.** ITCH 5.0 decoder ✅ · order-book reconstructor ✅ · lock-free SPSC
+> pipeline ✅ · benchmarks + replay ✅ · MT5 bridge ✅ — built phase by phase, each verified in CI.
 
 ## Why a *reconstructor*, not a matching engine
 
