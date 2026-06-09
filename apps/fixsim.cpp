@@ -1,4 +1,4 @@
-// fixsim — emit and parse a couple of FIX 4.4 order-entry messages, printing them
+// fixsim - emit and parse a couple of FIX 4.4 order-entry messages, printing them
 // with SOH shown as '|'. A tiny demo of the order-entry codec that complements the
 // ITCH market-data side (market data in, orders out).
 

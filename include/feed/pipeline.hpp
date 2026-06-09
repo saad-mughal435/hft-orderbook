@@ -34,7 +34,7 @@ inline std::size_t replay_single_threaded(const std::uint8_t* buf, std::size_t l
 ///
 /// The `OrderBook` is touched only by the consumer (the calling thread), so it
 /// needs no locking. Because the SPSC ring is strictly FIFO, the consumer applies
-/// messages in exactly the producer's order — identical to the single-threaded
+/// messages in exactly the producer's order - identical to the single-threaded
 /// path (see the parity test). Returns the number of messages applied.
 inline std::size_t replay_pipelined(const std::uint8_t* buf, std::size_t len,
                                     OrderBook& book, std::size_t ring_capacity = 1024) {

@@ -10,8 +10,8 @@
 namespace hftob {
 
 /// Collects per-sample latency measurements (nanoseconds) and reports the
-/// distribution. HFT cares about *tails*, so this surfaces p50/p99/p99.9/max —
-/// not just a mean — plus a compact log2 ASCII histogram. Percentiles are taken
+/// distribution. HFT cares about *tails*, so this surfaces p50/p99/p99.9/max -
+/// not just a mean - plus a compact log2 ASCII histogram. Percentiles are taken
 /// by sorting a copy: fine for an offline replay/report tool, never on a hot path.
 class LatencyHist {
 public:

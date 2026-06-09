@@ -1,9 +1,9 @@
-// mdrecv — MoldUDP64 market-data receiver. Reconstructs books from the *real-time*
+// mdrecv - MoldUDP64 market-data receiver. Reconstructs books from the *real-time*
 // UDP feed framing (BinaryFILE is for the historical files; MoldUDP64 wraps the
 // same ITCH messages in sequenced UDP datagrams for live multicast).
 //
 //   mdrecv --self [N]               generate N synthetic msgs, packetize + parse
-//                                   locally (no socket) — demo / CI smoke
+//                                   locally (no socket) - demo / CI smoke
 //   mdrecv --listen <port> [--ms T] bind 127.0.0.1:<port>, receive datagrams until
 //                                   end-of-session or T ms idle (default 2000)
 

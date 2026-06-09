@@ -7,7 +7,7 @@
 //|   OrderSend(), and returns the MqlTradeResult retcode as an ack. |
 //|                                                                  |
 //|   Transport: MQL5 built-in Socket* API (no DLLs, no ZeroMQ).     |
-//|   This .mq5 is a source artifact — it is compiled in MetaEditor  |
+//|   This .mq5 is a source artifact - it is compiled in MetaEditor  |
 //|   on Windows, not by this repo's CI (which is Linux-only). The   |
 //|   C++ side and the wire protocol are verified in CI by mt5d +    |
 //|   the mock-client integration test.                              |

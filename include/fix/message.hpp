@@ -31,7 +31,7 @@ struct Message {
     }
 };
 
-/// Sum of all bytes mod 256 — the FIX CheckSum (tag 10), formatted as 3 digits.
+/// Sum of all bytes mod 256 - the FIX CheckSum (tag 10), formatted as 3 digits.
 inline unsigned checksum(const std::string& s) {
     unsigned sum = 0;
     for (const unsigned char c : s) sum += c;

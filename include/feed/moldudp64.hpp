@@ -76,7 +76,7 @@ inline std::vector<std::vector<std::uint8_t>> packetize_mold(const std::string& 
     return out;
 }
 
-/// Tracks sequence continuity across datagrams — drop/gap detection, the central
+/// Tracks sequence continuity across datagrams - drop/gap detection, the central
 /// concern of a UDP multicast receiver. `sink(seq, message)` is called per message.
 class MoldSession {
 public:

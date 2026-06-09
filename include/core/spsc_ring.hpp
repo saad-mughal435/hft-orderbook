@@ -12,15 +12,15 @@ namespace hftob {
 /// one thread calls `push()`, exactly one calls `pop()`. Design points that make
 /// it fast:
 ///
-///   * **Power-of-two capacity** — the slot index is `counter & mask_`, so the
+///   * **Power-of-two capacity** - the slot index is `counter & mask_`, so the
 ///     wrap is a single AND instead of a modulo.
-///   * **Monotonic counters** — `head_`/`tail_` only ever increase, so `full`
+///   * **Monotonic counters** - `head_`/`tail_` only ever increase, so `full`
 ///     (`head - tail == capacity`) and `empty` (`head == tail`) are
 ///     distinguishable without sacrificing a slot.
-///   * **Cache-line isolation** — `head_` and `tail_` are `alignas(64)` on
+///   * **Cache-line isolation** - `head_` and `tail_` are `alignas(64)` on
 ///     separate lines so the producer and consumer never false-share the other
 ///     side's hot counter.
-///   * **Cached opposite index** — each side keeps a private copy of the other's
+///   * **Cached opposite index** - each side keeps a private copy of the other's
 ///     counter and only reloads it (an acquire across cores) when its local copy
 ///     says the ring looks full/empty, removing most cross-core atomic traffic
 ///     on the steady-state fast path.
@@ -60,7 +60,7 @@ public:
 
     std::size_t capacity() const { return cap_; }
 
-    /// Approximate occupancy — safe to call from either side (metrics/tests).
+    /// Approximate occupancy - safe to call from either side (metrics/tests).
     std::size_t size_approx() const {
         const std::size_t h = head_.load(std::memory_order_acquire);
         const std::size_t t = tail_.load(std::memory_order_acquire);

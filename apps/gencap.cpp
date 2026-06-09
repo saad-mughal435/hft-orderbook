@@ -1,4 +1,4 @@
-// gencap — write a small, reproducible synthetic NASDAQ ITCH 5.0 capture to disk,
+// gencap - write a small, reproducible synthetic NASDAQ ITCH 5.0 capture to disk,
 // so the replay demo and tests have a real file to read without the multi-GB
 // production sample. Deterministic: same N always yields the same bytes.
 //

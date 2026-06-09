@@ -8,7 +8,7 @@
 
 namespace hftob {
 
-/// Walk a **BinaryFILE-framed** ITCH 5.0 byte stream — the format NASDAQ's
+/// Walk a **BinaryFILE-framed** ITCH 5.0 byte stream - the format NASDAQ's
 /// downloadable daily samples use, where every message is preceded by a 2-byte
 /// **big-endian length**. For each message that decodes, `sink(const
 /// itch::Message&)` is invoked. The framed length is authoritative (it covers

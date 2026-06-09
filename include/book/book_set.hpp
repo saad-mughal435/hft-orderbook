@@ -14,7 +14,7 @@ namespace hftob {
 ///
 /// Every ITCH message carries a 2-byte `stock_locate` in its common header (the
 /// per-day index of the security), so order messages route to the right book by
-/// that key alone — no per-message symbol lookup on the hot path. StockDirectory
+/// that key alone - no per-message symbol lookup on the hot path. StockDirectory
 /// ('R') messages populate the `locate -> symbol` map so a book can also be found
 /// by ticker. This is what makes `obreplay` meaningful on a real NASDAQ day, which
 /// interleaves thousands of symbols in one stream.

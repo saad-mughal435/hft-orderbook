@@ -2,7 +2,7 @@
 // decode->book replay (single-threaded and pipelined), and the SPSC ring.
 //
 // CI runs these as a smoke test (tiny --benchmark_min_time) only to prove they
-// build and run — GitHub's shared runners are virtualized and not representative
+// build and run - GitHub's shared runners are virtualized and not representative
 // of trading hardware, so the *numbers* here are not HFT figures. Run on a pinned
 // bare-metal box for real p50/p99/p999 (methodology in the README).
 
@@ -89,7 +89,7 @@ BENCHMARK_TEMPLATE(BM_BookOps, OrderBook)->Arg(10000);          // std::map leve
 BENCHMARK_TEMPLATE(BM_BookOps, FlatOrderBook)->Arg(10000);      // flat sorted-vector levels
 BENCHMARK_TEMPLATE(BM_BookOps, WindowedOrderBook)->Arg(10000);  // price-tick-indexed array
 
-// SPSC ring push+pop round trip (single-threaded — measures the per-op cost).
+// SPSC ring push+pop round trip (single-threaded - measures the per-op cost).
 static void BM_SpscPushPop(benchmark::State& state) {
     SpscRing<int> ring(1024);
     int           v = 0;

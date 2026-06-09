@@ -31,7 +31,7 @@ struct BookMetrics {
 };
 
 /// Compute metrics from any book exposing `best_bid` / `best_ask` and
-/// `bids(n)` / `asks(n)` (i.e. `BasicOrderBook<...>`). Pure — no book state is
+/// `bids(n)` / `asks(n)` (i.e. `BasicOrderBook<...>`). Pure - no book state is
 /// touched, so it is safe to call from a reader. The **micro-price** weights each
 /// side's price by the *opposite* side's size, so heavy bids pull fair value
 /// toward the ask (the classic short-term predictor). Empty / one-sided / crossed

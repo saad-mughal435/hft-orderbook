@@ -14,7 +14,7 @@
 
 namespace hftob {
 
-/// Replay a BinaryFILE-framed ITCH stream across `n_workers` **shards** — the
+/// Replay a BinaryFILE-framed ITCH stream across `n_workers` **shards** - the
 /// standard way market-data systems scale past one book thread.
 ///
 ///   producer (calling) thread : deframe + decode -> push to ring[shard(locate)]
@@ -22,7 +22,7 @@ namespace hftob {
 ///
 /// Symbols are partitioned by `stock_locate`, so each ring is strictly
 /// single-producer / single-consumer (reusing `SpscRing`) and each symbol's book
-/// is touched by exactly one worker — no locking. The shard books are disjoint, so
+/// is touched by exactly one worker - no locking. The shard books are disjoint, so
 /// they merge into `out` after the workers join. Because per-symbol message order
 /// is preserved within its shard, the result is identical to a single-threaded
 /// `BookSet` replay (parity-tested). Returns the number of messages applied.

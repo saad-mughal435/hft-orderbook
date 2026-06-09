@@ -12,7 +12,7 @@ namespace hftob {
 /// stays valid until it is freed.
 ///
 /// Caveat: a reference returned by `operator[]` is invalidated by an `alloc()`
-/// that grows the backing vector — never hold a `T&` across an `alloc()`.
+/// that grows the backing vector - never hold a `T&` across an `alloc()`.
 template <typename T>
 class ObjectPool {
 public:

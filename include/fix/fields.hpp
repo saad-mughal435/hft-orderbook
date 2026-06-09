@@ -4,7 +4,7 @@ namespace hftob {
 namespace fix {
 
 /// FIX (Financial Information eXchange) is the order-entry protocol every trading
-/// venue speaks — the counterpart to a market-data feed like ITCH. Messages are
+/// venue speaks - the counterpart to a market-data feed like ITCH. Messages are
 /// `tag=value` pairs delimited by SOH (0x01), framed by `8=BeginString`,
 /// `9=BodyLength`, and a trailing `10=CheckSum`. This is a compact FIX 4.4 codec
 /// for the order-entry path (NewOrderSingle / ExecutionReport).

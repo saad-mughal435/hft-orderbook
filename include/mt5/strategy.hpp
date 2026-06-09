@@ -12,7 +12,7 @@ namespace mt5 {
 /// exercise the bridge round trip end to end. Rule: once primed, if the mid price
 /// jumps up by at least `step` versus the previous tick, emit a market **Buy**;
 /// if it drops by at least `step`, emit a market **Sell**. It is intentionally
-/// trivial — the point of this repo is the market-data engine and the bridge, not
+/// trivial - the point of this repo is the market-data engine and the bridge, not
 /// alpha. Replace `on_tick` with real logic to drive live orders.
 class ExampleStrategy {
 public:

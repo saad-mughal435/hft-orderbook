@@ -1,11 +1,11 @@
-// obreplay — replay a NASDAQ ITCH 5.0 capture (or a synthetic stream) through the
+// obreplay - replay a NASDAQ ITCH 5.0 capture (or a synthetic stream) through the
 // full decode -> multi-symbol book pipeline and report throughput, per-symbol
 // top-of-book + depth, and a latency distribution.
 //
 //   obreplay <capture.itch | capture.gz> [--symbol SYM]
 //   obreplay --synthetic <N>             [--symbol SYM]
 //
-// Real full-day NASDAQ samples (≈3.5–5.6 GB) live at emi.nasdaq.com and are NOT
+// Real full-day NASDAQ samples (≈3.5-5.6 GB) live at emi.nasdaq.com and are NOT
 // committed; `gencap` produces a small reproducible capture, or use --synthetic.
 // Captures are BinaryFILE-framed (2-byte big-endian length per message). A real
 // day interleaves thousands of symbols, routed by stock_locate into a BookSet.
@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
 
     if (data.empty()) { std::cerr << "error: empty input\n"; return 1; }
 
-    // Pass 1: timed end-to-end throughput — single-threaded, or sharded across
+    // Pass 1: timed end-to-end throughput - single-threaded, or sharded across
     // worker threads with --threads. One clock pair, no per-message timer overhead.
     BookSet     book;
     std::size_t n  = 0;

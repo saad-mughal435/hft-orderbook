@@ -50,7 +50,7 @@ inline bool handshake(mt5::LineSocket& sock) {
     return sock.send_all(resp.data(), resp.size());
 }
 
-/// Build a server→client **text** frame (FIN set, opcode 0x1, unmasked — servers
+/// Build a server→client **text** frame (FIN set, opcode 0x1, unmasked - servers
 /// never mask). Handles the 7 / 16 / 64-bit payload-length encodings.
 inline std::string frame_text(const std::string& payload) {
     std::string f;
@@ -75,7 +75,7 @@ inline bool send_text(mt5::LineSocket& sock, const std::string& payload) {
     return sock.send_all(f.data(), f.size());
 }
 
-/// Read one frame's payload (unmasks if the masked bit is set — clients must mask,
+/// Read one frame's payload (unmasks if the masked bit is set - clients must mask,
 /// servers must not). `opcode`: 0x1 text, 0x8 close, 0x9 ping, 0xA pong. Returns
 /// false on close/error.
 inline bool read_frame(mt5::LineSocket& sock, std::string& payload, std::uint8_t& opcode) {

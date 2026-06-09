@@ -11,7 +11,7 @@
 namespace hftob {
 
 /// Price-level store backed by a **price-tick-indexed array windowed around the
-/// inside** — the canonical L2 structure in low-latency books. A contiguous
+/// inside** - the canonical L2 structure in low-latency books. A contiguous
 /// `slots_` array maps a window of `W` consecutive ticks `[base_, base_+W)` to
 /// quantities (O(1) `inc`/`dec`/`at` by direct indexing), with a tracked
 /// `best_idx_` for O(1) `best`. Levels far outside the window spill to a small
@@ -74,7 +74,7 @@ public:
 
     std::size_t size() const { return count_ + overflow_.size(); }
 
-    /// Top-`n` levels, best first — a merge of the window (walked from the inside
+    /// Top-`n` levels, best first - a merge of the window (walked from the inside
     /// outward in `Compare` order) and the overflow map (already in `Compare` order).
     std::vector<std::pair<Price, Qty>> top(std::size_t n) const {
         std::vector<std::pair<Price, Qty>> out;

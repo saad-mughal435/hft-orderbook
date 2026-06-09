@@ -31,7 +31,7 @@ enum class MsgKind { Unknown, Hello, Subscribe, Tick, Order, Ack, Nop, Bye, Hear
 
 struct Tick {
     std::string   symbol;
-    std::uint64_t time   = 0;   // epoch (seconds or ms — opaque to the engine)
+    std::uint64_t time   = 0;   // epoch (seconds or ms - opaque to the engine)
     double        bid    = 0.0;
     double        ask    = 0.0;
     double        last   = 0.0;

@@ -1,7 +1,7 @@
 #pragma once
 
 // A minimal blocking TCP line-socket layer for the MT5 bridge (NDJSON framing).
-// POSIX sockets only — the bridge server runs on Linux/macOS in CI and in
+// POSIX sockets only - the bridge server runs on Linux/macOS in CI and in
 // production; the MetaTrader 5 side uses MQL5's own Socket* API (see
 // mt5/ITCHBridge.mq5), not this header. Guarded so a Windows build simply omits
 // the server/integration-test targets rather than failing.
@@ -75,7 +75,7 @@ public:
     }
 
     /// Read the next '\n'-delimited line. Returns false on peer-close OR on a recv
-    /// timeout (when `set_recv_timeout` is in effect) — `timed_out()` distinguishes
+    /// timeout (when `set_recv_timeout` is in effect) - `timed_out()` distinguishes
     /// the two. A partial line is preserved across a timeout, not handed back.
     bool recv_line(std::string& out) {
         last_timed_out_ = false;

@@ -20,8 +20,8 @@ struct Bar {
     double        vwap   = 0.0;
 };
 
-/// The **trade tape**: consumes executed trades (ITCH `P` / `Q`) — distinct from
-/// the order book, which tracks resting liquidity — and derives last price,
+/// The **trade tape**: consumes executed trades (ITCH `P` / `Q`) - distinct from
+/// the order book, which tracks resting liquidity - and derives last price,
 /// cumulative volume, running VWAP, and OHLCV bars bucketed by a fixed nanosecond
 /// interval. The book reconstructs *intent*; the tape records what actually traded.
 class Tape {

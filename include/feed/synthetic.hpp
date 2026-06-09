@@ -42,7 +42,7 @@ inline void stock8(std::vector<std::uint8_t>& b) {
 /// Build a deterministic synthetic NASDAQ ITCH 5.0 byte stream of `n_messages`
 /// messages: a random walk that adds resting orders and then executes / cancels /
 /// deletes / replaces them against a live pool, so the `order_ref` map stays
-/// populated — realistic load for benchmarking the hot path. The same `seed`
+/// populated - realistic load for benchmarking the hot path. The same `seed`
 /// always yields identical bytes, so benchmarks and the replay demo are
 /// reproducible. The stream is **BinaryFILE-framed** (each message preceded by a
 /// 2-byte big-endian length), matching real NASDAQ daily captures and read by
@@ -139,7 +139,7 @@ inline std::vector<std::uint8_t> make_synthetic_itch(std::size_t n_messages,
             be32(m, static_cast<std::uint32_t>(add_px(side)));
             frame();
             live[i] = {nref, side};
-        } else {                                 // trade ('P') — tape-only, no book change
+        } else {                                 // trade ('P') - tape-only, no book change
             const char side = (pct(2) == 0) ? 'B' : 'S';
             hdr(m, 'P', 1, ts);
             be_n(m, 0, 8);                       // order_ref (unused by the tape)
@@ -258,7 +258,7 @@ inline std::vector<std::uint8_t> make_synthetic_multi(std::size_t n_messages,
 }
 
 /// Build a deterministic synthetic ITCH 5.0 stream that reconstructs into a
-/// **realistic, never-crossed** limit-order book — a clean L2 ladder around a
+/// **realistic, never-crossed** limit-order book - a clean L2 ladder around a
 /// tight spread, with churning depth and trade prints at the mid. Unlike
 /// `make_synthetic_itch` (a stress mix that lets resting orders pile up across the
 /// mid, since the engine is a reconstructor, not a matcher), every add here

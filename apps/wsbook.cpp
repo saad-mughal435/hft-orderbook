@@ -1,8 +1,8 @@
-// wsbook — replay an ITCH capture/synthetic and stream conflated L2 depth +
+// wsbook - replay an ITCH capture/synthetic and stream conflated L2 depth +
 // microstructure signals as JSON. Two modes:
 //
 //   wsbook --dump <N> [--synthetic M] [--symbols K] [--symbol SYM]
-//       Print N evenly-spaced JSON snapshots (NDJSON) to stdout — used to *record*
+//       Print N evenly-spaced JSON snapshots (NDJSON) to stdout - used to *record*
 //       a real engine replay for the static browser viewer, and as a CI smoke.
 //
 //   wsbook [port] [--synthetic M] [--symbols K] [--symbol SYM] [--frames N]

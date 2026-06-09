@@ -1,4 +1,4 @@
-// mt5d — the MetaTrader 5 bridge server. Listens on a loopback TCP port for the
+// mt5d - the MetaTrader 5 bridge server. Listens on a loopback TCP port for the
 // ITCHBridge.mq5 Expert Advisor, feeds incoming ticks to a strategy, sends order
 // commands back, and counts the trade acks the EA returns. Each accepted client
 // is served to completion (until it sends `bye` or disconnects), then mt5d waits

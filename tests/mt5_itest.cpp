@@ -1,7 +1,7 @@
 // Full MT5-bridge integration test over a real loopback TCP socket: a mock EA
 // (this test) streams recorded ticks to the bridge server (run_bridge, in a
 // second thread), the server's strategy turns some ticks into orders, the mock
-// EA executes them by returning acks, and we assert the full round trip — with no
+// EA executes them by returning acks, and we assert the full round trip - with no
 // Windows and no MetaTrader terminal. Linux/macOS only (POSIX sockets).
 
 #include <catch2/catch_test_macros.hpp>

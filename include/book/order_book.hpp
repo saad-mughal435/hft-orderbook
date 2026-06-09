@@ -24,7 +24,7 @@ namespace hftob {
 /// per-order heap churn) indexed by a `reserve`-d `order_ref -> handle` map. Price
 /// levels live in a pluggable store (`LevelStore`) keyed so the best quote is
 /// first; the default `MapLevels` is the readable baseline and `FlatLevels` is the
-/// cache-friendly variant — both are exercised by tests and benchmarked head to
+/// cache-friendly variant - both are exercised by tests and benchmarked head to
 /// head (the engine is templated so the A/B is a one-line type change).
 template <template <class> class LevelStore = MapLevels>
 class BasicOrderBook {
@@ -49,7 +49,7 @@ public:
         else                   asks_.inc(price, shares);
     }
 
-    /// Reduce an order by `qty` (ITCH Order Executed / Cancel — partial). Removes
+    /// Reduce an order by `qty` (ITCH Order Executed / Cancel - partial). Removes
     /// the order if fully consumed. Returns false if the ref is unknown.
     bool reduce(OrderRef ref, Qty qty) {
         auto it = index_.find(ref);
@@ -130,7 +130,7 @@ public:
     std::vector<std::pair<Price, Qty>> asks(std::size_t n) const { return asks_.top(n); }
 
     /// Recompute every level's quantity from the order map and check it matches the
-    /// incrementally-maintained level totals — the core consistency invariant.
+    /// incrementally-maintained level totals - the core consistency invariant.
     /// O(orders); for tests/asserts, not the hot path.
     bool invariant_ok() const {
         std::map<Price, Qty, std::greater<Price>> rebuilt_bids;
@@ -165,7 +165,7 @@ private:
 
 /// Default book: std::map levels (readable baseline). `FlatOrderBook` swaps in the
 /// cache-friendly sorted-vector levels and `WindowedOrderBook` the price-tick-indexed
-/// array — the three are benchmarked head to head (`BM_BookOps`).
+/// array - the three are benchmarked head to head (`BM_BookOps`).
 using OrderBook         = BasicOrderBook<MapLevels>;
 using FlatOrderBook     = BasicOrderBook<FlatLevels>;
 using WindowedOrderBook = BasicOrderBook<WindowedLevels>;

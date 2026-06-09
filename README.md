@@ -1,31 +1,31 @@
 # hft-orderbook
 
 A low-latency **C++17** trading-infrastructure project. It reconstructs live limit-order books from
-the real **NASDAQ TotalView-ITCH 5.0** feed — over both **BinaryFILE** captures and the **MoldUDP64**
-UDP multicast transport — derives microstructure signals, and speaks **FIX 4.4** order entry plus a
+the real **NASDAQ TotalView-ITCH 5.0** feed - over both **BinaryFILE** captures and the **MoldUDP64**
+UDP multicast transport - derives microstructure signals, and speaks **FIX 4.4** order entry plus a
 **MetaTrader 5** bridge. Built the way trading systems are: **lock-free / wait-free**, no hot-path
 allocation, cache-line-disciplined, sharded across cores, and **sanitizer- and fuzz-hardened**.
 
 [![CI](https://github.com/saad-mughal435/hft-orderbook/actions/workflows/ci.yml/badge.svg)](https://github.com/saad-mughal435/hft-orderbook/actions/workflows/ci.yml)
 
-**What it demonstrates** — for an HFT/low-latency C++ role:
-- **Ultra-low-latency C++** — lock-free/wait-free SPSC ring, `PAUSE` busy-wait, object-pooled and
+**What it demonstrates** - for an HFT/low-latency C++ role:
+- **Ultra-low-latency C++** - lock-free/wait-free SPSC ring, `PAUSE` busy-wait, object-pooled and
   integer-priced hot path, a price-tick-indexed book (`docs/PERFORMANCE.md`).
-- **Market connectivity** — ITCH 5.0 decode (manual big-endian), the **MoldUDP64** UDP feed with
+- **Market connectivity** - ITCH 5.0 decode (manual big-endian), the **MoldUDP64** UDP feed with
   sequence-gap detection, and a dependency-free WebSocket publisher.
-- **Order entry** — a **FIX 4.4** codec (NewOrderSingle / ExecutionReport, BodyLength + CheckSum).
-- **Distributed / scale** — symbols **sharded** across worker threads, one SPSC ring per core.
-- **Rigour** — 6 CI jobs: build+test, **ThreadSanitizer**, ASan/UBSan, clang **`-Werror`**, **libFuzzer**,
+- **Order entry** - a **FIX 4.4** codec (NewOrderSingle / ExecutionReport, BodyLength + CheckSum).
+- **Distributed / scale** - symbols **sharded** across worker threads, one SPSC ring per core.
+- **Rigour** - 6 CI jobs: build+test, **ThreadSanitizer**, ASan/UBSan, clang **`-Werror`**, **libFuzzer**,
   benchmarks.
 
 > **Status: feature-complete & hardened.** ITCH 5.0 decoder ✅ · order-book reconstructor ✅ · lock-free
 > + sharded pipeline ✅ · benchmarks + replay ✅ · **MoldUDP64 UDP** ✅ · **FIX 4.4** ✅ · MT5 bridge ✅ ·
-> live L2 viewer ✅ — built phase by phase, each verified in CI.
+> live L2 viewer ✅ - built phase by phase, each verified in CI.
 
 ## Why a *reconstructor*, not a matching engine
 
 ITCH is **order-based**: every message carries an explicit 8-byte order reference and the
-exchange has **already matched**. So this engine never walks the book to match — it applies
+exchange has **already matched**. So this engine never walks the book to match - it applies
 deterministic mutations (add / execute / cancel / delete / replace) keyed by order reference.
 The dominant data structure is therefore an **O(1) `order_ref → order` map**, which makes the
 design both simpler and faster than a generic matching engine.
@@ -38,12 +38,12 @@ design both simpler and faster than a generic matching engine.
 | `itch/`  | ITCH 5.0 message decode (manual big-endian) |
 | `feed/`  | BinaryFILE deframer, **MoldUDP64** UDP feed framing + UDP socket, two-stage + **sharded** decode→book pipelines, dependency-free WebSocket codec, synthetic generators |
 | `book/`  | order-book reconstructor (pooled `order_ref → order`) + multi-symbol `BookSet` (by `stock_locate`) + **microstructure metrics** + **trade tape** (VWAP / OHLCV) |
-| `fix/`   | **FIX 4.4** order-entry codec — tags/enums + message builder/parser (auto BodyLength + CheckSum), NewOrderSingle / ExecutionReport |
+| `fix/`   | **FIX 4.4** order-entry codec - tags/enums + message builder/parser (auto BodyLength + CheckSum), NewOrderSingle / ExecutionReport |
 | `mt5/`   | NDJSON bridge protocol (ticks / orders / acks + **depth** & **signal** publish) + TCP server + mock client; `ITCHBridge.mq5` EA |
 | `bench/` | Google Benchmark microbenchmarks (decode / book / SPSC) |
 | `apps/`  | `obreplay` (multi-symbol, `--threads`, signals), `mdrecv` (MoldUDP64 UDP), `wsbook` (WebSocket L2), `mt5d` (bridge), `fixsim`, `gencap` |
 
-The ITCH decoder extracts every field by **explicit big-endian byte assembly** — never by
+The ITCH decoder extracts every field by **explicit big-endian byte assembly** - never by
 casting a packed struct over the wire (the layouts are big-endian with misaligned multi-byte
 fields, so a cast would be undefined behaviour and wrong on little-endian hosts).
 
@@ -60,12 +60,12 @@ Requires CMake ≥ 3.16 and a C++17 compiler. Tests use
 
 ## Market data
 
-NASDAQ publishes full-day TotalView-ITCH 5.0 samples (≈ 3.5–5.6 GB each, no login) at
+NASDAQ publishes full-day TotalView-ITCH 5.0 samples (≈ 3.5-5.6 GB each, no login) at
 `https://emi.nasdaq.com/ITCH/Nasdaq ITCH/` as `MMDDYYYY.NASDAQ_ITCH50.gz`. Those are **not**
 committed; instead the repo ships a deterministic synthetic-capture generator (`gencap`) and an
 `obreplay --synthetic N` mode for tests and the demo, and `obreplay` can be pointed at a real `.gz`.
-Both the real files and the synthetic generator use the **BinaryFILE** layout — every message is
-preceded by a 2-byte big-endian length — which the engine deframes (`feed/framing.hpp`).
+Both the real files and the synthetic generator use the **BinaryFILE** layout - every message is
+preceded by a 2-byte big-endian length - which the engine deframes (`feed/framing.hpp`).
 
 A real NASDAQ day interleaves thousands of symbols in one stream; `obreplay` routes them by
 `stock_locate` into a per-symbol `BookSet`, names the books from the StockDirectory (`R`)
@@ -85,60 +85,60 @@ Microbenchmarks ([Google Benchmark](https://github.com/google/benchmark), `-DHFT
 cover the decode and the per-op book mutation. The book is templated over its price-level store, so
 **three** implementations are compared head to head on the *same* workload: `MapLevels` (a `std::map`
 red-black tree), `FlatLevels` (a cache-friendly sorted vector), and `WindowedLevels` (a price-tick-
-indexed array windowed around the inside — the canonical L2 structure):
+indexed array windowed around the inside - the canonical L2 structure):
 
-| benchmark (GitHub CI runner — **relative only**) | result |
+| benchmark (GitHub CI runner - **relative only**) | result |
 | --- | --- |
 | decode one ITCH message | ~5 ns |
 | SPSC ring push + pop | ~3 ns |
-| build a 10k-order book — `MapLevels` (std::map) | ~89 ns/msg (≈11.2 M msg/s) |
-| build a 10k-order book — `FlatLevels` (sorted vector) | ~89 ns/msg (≈11.3 M msg/s) |
-| build a 10k-order book — `WindowedLevels` (tick-indexed array) | **~71 ns/msg (≈14.0 M msg/s)** |
+| build a 10k-order book - `MapLevels` (std::map) | ~89 ns/msg (≈11.2 M msg/s) |
+| build a 10k-order book - `FlatLevels` (sorted vector) | ~89 ns/msg (≈11.3 M msg/s) |
+| build a 10k-order book - `WindowedLevels` (tick-indexed array) | **~71 ns/msg (≈14.0 M msg/s)** |
 
-The **windowed array wins** — ~24% faster than the `std::map` baseline on this run — because an order
+The **windowed array wins** - ~24% faster than the `std::map` baseline on this run - because an order
 keyed by price tick is an O(1) array index (and the best quote is a tracked index), versus the tree's
 O(log n) per op. `MapLevels` and `FlatLevels` land close here; their *relative* order is not stable
-across runs (an earlier run had flat ~25% slower — the flat vector pays an O(n) tail-shift when the mid
+across runs (an earlier run had flat ~25% slower - the flat vector pays an O(n) tail-shift when the mid
 walks across many levels). That instability is the point of reporting **same-run** numbers: the engine
 ships all three, parity-tested (`map ≡ flat ≡ windowed`), so the trade-offs are *measured*, not assumed.
 
-A full **decode + book apply is well under 100 ns** on this runner — sub-microsecond per message.
+A full **decode + book apply is well under 100 ns** on this runner - sub-microsecond per message.
 The hot path is allocation-free (object pool + reserved index), integer-priced, branch-light, and
 cache-line-disciplined; the lock-free ring busy-waits with `PAUSE` (`cpu_relax`), and the engine
 exposes `rdtsc` + `pin_this_thread` for a pinned bare-metal deployment. See
 **[`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)** for the hot-path design and the measurement method.
 
-> These are **relative, same-runner** figures on virtualized CI hardware — fair for an A/B, not HFT
-> numbers. Absolute p50/p99/p999 require pinning threads on bare metal (isolcpus, fixed TSC) — the
+> These are **relative, same-runner** figures on virtualized CI hardware - fair for an A/B, not HFT
+> numbers. Absolute p50/p99/p999 require pinning threads on bare metal (isolcpus, fixed TSC) - the
 > method is documented; run it on a real box. No fabricated figures here.
 
 ## Analytics & live view
 
 A reconstructed book is only useful if it produces something. `book/metrics.hpp` derives the signals
-a desk actually watches — **micro-price** (size-weighted fair value), **order-book imbalance** (top
-and N-level), and the **spread** in ticks and bps — as pure functions over any book. `book/tape.hpp`
+a desk actually watches - **micro-price** (size-weighted fair value), **order-book imbalance** (top
+and N-level), and the **spread** in ticks and bps - as pure functions over any book. `book/tape.hpp`
 tracks the **trade tape** (last, cumulative volume, **VWAP**, OHLCV bars) from the ITCH `P`/`Q`
 prints, distinct from the resting-liquidity book. `obreplay` prints both per symbol (`--bars` for the
 OHLCV ladder), and the MT5 bridge can publish them as `signal` messages.
 
 **Scaling.** `feed/sharded_pipeline.hpp` partitions symbols across `W` worker threads by
-`hash(stock_locate)`, each owning its books behind its own strictly-SPSC ring — the standard
+`hash(stock_locate)`, each owning its books behind its own strictly-SPSC ring - the standard
 market-data scaling pattern. `obreplay --threads W --symbols K` runs it; it's parity-checked against
 the single-threaded path and ThreadSanitizer-gated.
 
 **Watch it live.** `wsbook` streams conflated L2 depth + signals as JSON over a **dependency-free
-WebSocket** (hand-rolled SHA-1 + RFC-6455 frame codec — no libraries), to a small browser
+WebSocket** (hand-rolled SHA-1 + RFC-6455 frame codec - no libraries), to a small browser
 [book viewer](https://saadm.dev/hft-book/viewer.html). `wsbook --dump N` records a real replay to
-NDJSON (that's how the viewer's bundled snapshot stream is produced — genuine engine output, not a
+NDJSON (that's how the viewer's bundled snapshot stream is produced - genuine engine output, not a
 mock).
 
 ## Quality
 
 Every push runs, in GitHub Actions:
 
-- **build + test** (`ctest`, gcc) — unit, property/invariant, multi-symbol replay, and the MT5
+- **build + test** (`ctest`, gcc) - unit, property/invariant, multi-symbol replay, and the MT5
   loopback bridge integration test
-- **ThreadSanitizer** over the SPSC / pipeline / bridge threads — the proof the lock-free ring is race-free
+- **ThreadSanitizer** over the SPSC / pipeline / bridge threads - the proof the lock-free ring is race-free
 - **AddressSanitizer + UndefinedBehaviorSanitizer** over the suite and a replay run
 - **clang `-Wall -Wextra -Wpedantic -Werror`** build of the library and tools
 - **libFuzzer** feeding arbitrary bytes through the deframer + decoder + book (ASan-checked)

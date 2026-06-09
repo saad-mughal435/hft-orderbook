@@ -17,7 +17,7 @@ std::size_t message_length(char type);
 /// message length (the value from the framing prefix). Returns false if the
 /// buffer is too short for the type or the type is not handled.
 ///
-/// Fields are extracted by explicit big-endian byte assembly — never by casting
+/// Fields are extracted by explicit big-endian byte assembly - never by casting
 /// a packed struct over the wire (the layouts have misaligned multi-byte fields
 /// and are big-endian, so a cast would be UB / wrong on little-endian hosts).
 bool decode(const std::uint8_t* buf, std::size_t len, Message& out);

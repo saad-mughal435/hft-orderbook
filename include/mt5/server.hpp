@@ -22,7 +22,7 @@ struct BridgeStats {
 
 /// Run one bridge session on an accepted connection until the peer sends `bye`,
 /// closes, or (if `idle_timeout_ms`/`max_idle_intervals` are set) goes silent for
-/// `max_idle_intervals` consecutive timeouts — so a dead EA can't pin the session
+/// `max_idle_intervals` consecutive timeouts - so a dead EA can't pin the session
 /// forever. Any received message (including a heartbeat) resets the idle counter.
 ///
 /// The protocol is strictly request/response so it is race-free without locking:
@@ -93,7 +93,7 @@ BridgeStats run_bridge(LineSocket& sock, Strategy& strat,
     return st;
 }
 
-/// Publish a top-`n` depth snapshot of `book` for `symbol` to a connected client —
+/// Publish a top-`n` depth snapshot of `book` for `symbol` to a connected client -
 /// how the ITCH-reconstructed book streams out to a MetaTrader/other subscriber.
 /// Templated on the book type to keep this header decoupled from `book/`.
 template <typename Book>

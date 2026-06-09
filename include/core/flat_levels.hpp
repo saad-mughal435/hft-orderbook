@@ -11,7 +11,7 @@
 namespace hftob {
 
 /// Price-level store backed by `std::map` (a red-black tree). `Compare` orders the
-/// levels so the best quote is first — `std::greater` for bids (highest first),
+/// levels so the best quote is first - `std::greater` for bids (highest first),
 /// `std::less` for asks (lowest first). This is the readable baseline that the
 /// cache-friendly `FlatLevels` is benchmarked against. Both expose the same
 /// interface so `BasicOrderBook` is templated over the choice.
@@ -84,7 +84,7 @@ public:
     }
 
 private:
-    // First element whose price is not "better than" p, per Compare — i.e. the
+    // First element whose price is not "better than" p, per Compare - i.e. the
     // position of p if present, else its insertion point that preserves order.
     // (auto-deduced iterator type avoids naming the dependent member iterator.)
     auto find(Price p) {
