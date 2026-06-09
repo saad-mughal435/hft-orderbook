@@ -34,6 +34,9 @@ jobs:
           ./build/gencap 20000 /tmp/synth.itch
           ./build/obreplay /tmp/synth.itch
 
+      - name: FIX codec smoke
+        run: ./build/fixsim
+
       - name: Record book replay (real engine output, for the static viewer)
         run: ./build/wsbook --dump 72 --synthetic 7200 > book-replay.ndjson
 

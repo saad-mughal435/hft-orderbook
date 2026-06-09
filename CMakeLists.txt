@@ -41,6 +41,10 @@ endif()
 add_executable(gencap apps/gencap.cpp)
 target_link_libraries(gencap PRIVATE hftob)
 
+# fixsim: demo the FIX 4.4 order-entry codec (portable, no sockets).
+add_executable(fixsim apps/fixsim.cpp)
+target_link_libraries(fixsim PRIVATE hftob)
+
 # mt5d / wsbook: POSIX-socket servers (Linux/macOS only).
 if(UNIX)
   add_executable(mt5d apps/mt5d.cpp)
@@ -99,6 +103,7 @@ if(HFTOB_BUILD_TESTS)
     tests/flat_levels_tests.cpp
     tests/windowed_levels_tests.cpp
     tests/sha1_tests.cpp
+    tests/fix_tests.cpp
     tests/spsc_tests.cpp
     tests/pipeline_tests.cpp
     tests/sharded_tests.cpp
