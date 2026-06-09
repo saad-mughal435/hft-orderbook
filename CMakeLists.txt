@@ -31,11 +31,15 @@ if(HFTOB_BUILD_TESTS)
   )
   FetchContent_MakeAvailable(Catch2)
 
+  find_package(Threads REQUIRED)
+
   add_executable(hftob_tests
     tests/itch_tests.cpp
     tests/book_tests.cpp
+    tests/spsc_tests.cpp
+    tests/pipeline_tests.cpp
   )
-  target_link_libraries(hftob_tests PRIVATE hftob Catch2::Catch2WithMain)
+  target_link_libraries(hftob_tests PRIVATE hftob Catch2::Catch2WithMain Threads::Threads)
 
   enable_testing()
   add_test(NAME unit COMMAND hftob_tests)
