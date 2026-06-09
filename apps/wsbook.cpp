@@ -20,6 +20,7 @@
 #include "book/book_set.hpp"
 #include "book/metrics.hpp"
 #include "book/order_book.hpp"
+#include "book/tape.hpp"
 #include "core/types.hpp"
 #include "feed/framing.hpp"
 #include "feed/synthetic.hpp"
@@ -38,7 +39,8 @@ std::string fmt(double v) {
     return std::string(b);
 }
 
-std::string snapshot_json(const std::string& sym, const OrderBook& ob, std::size_t seq) {
+std::string snapshot_json(const std::string& sym, const OrderBook& ob, const Tape& tape,
+                          std::size_t seq) {
     const auto bids = ob.bids(10);
     const auto asks = ob.asks(10);
     const auto mx   = compute_metrics(ob, 5);
@@ -53,7 +55,11 @@ std::string snapshot_json(const std::string& sym, const OrderBook& ob, std::size
         s += "[" + fmt(to_dollars(asks[i].first)) + "," + std::to_string(asks[i].second) + "]";
     }
     s += "],\"mid\":" + fmt(mx.mid) + ",\"microprice\":" + fmt(mx.microprice) +
-         ",\"imbalance\":" + fmt(mx.imbalance_top) + ",\"spread_bps\":" + fmt(mx.spread_bps) + "}";
+         ",\"imbalance\":" + fmt(mx.imbalance_top) + ",\"spread_bps\":" + fmt(mx.spread_bps);
+    if (tape.has_last())
+        s += ",\"last\":" + fmt(to_dollars(tape.last())) + ",\"vwap\":" + fmt(tape.vwap()) +
+             ",\"volume\":" + std::to_string(tape.volume());
+    s += "}";
     return s;
 }
 
@@ -85,9 +91,11 @@ int main(int argc, char** argv) {
     if (symbols < 1) symbols = 1;
     if (synth < 1)   synth = 1;
 
+    // Single-symbol viewer demo uses the clean (never-crossed) generator; the
+    // multi-symbol path keeps the stress mix.
     const std::vector<std::uint8_t> data =
         (symbols > 1) ? make_synthetic_multi(static_cast<std::size_t>(synth), static_cast<unsigned>(symbols))
-                      : make_synthetic_itch(static_cast<std::size_t>(synth));
+                      : make_synthetic_book(static_cast<std::size_t>(synth));
 
     auto focal_locate = [&](const BookSet& bs) -> std::uint16_t {
         if (!focus.empty())
@@ -105,20 +113,25 @@ int main(int argc, char** argv) {
         const std::size_t total = count_messages(data);
         const std::size_t every = total / (target + 1) + 1;
         BookSet           book;
+        Tape              tape(1000000);   // 1 ms bars
         std::size_t       applied = 0, sent = 0, off = 0;
         while (off + 2 <= data.size() && sent < target) {
             const std::size_t mlen =
                 (static_cast<std::size_t>(data[off]) << 8) | static_cast<std::size_t>(data[off + 1]);
             if (mlen == 0 || off + 2 + mlen > data.size()) break;
             itch::Message m;
-            if (itch::decode(data.data() + off + 2, mlen, m)) book.apply(m);
+            if (itch::decode(data.data() + off + 2, mlen, m)) {
+                book.apply(m);
+                if (m.type == itch::MsgType::Trade || m.type == itch::MsgType::CrossTrade)
+                    tape.on_trade(m.price, m.shares, m.timestamp);
+            }
             ++applied;
             off += 2 + mlen;
             if (applied % every == 0) {
                 const std::uint16_t loc = focal_locate(book);
                 const OrderBook*    ob  = book.book(loc);
                 if (ob) {
-                    if (!emit(snapshot_json(focal_name(book, loc), *ob, sent))) return;
+                    if (!emit(snapshot_json(focal_name(book, loc), *ob, tape, sent))) return;
                     ++sent;
                 }
             }

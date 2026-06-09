@@ -257,4 +257,106 @@ inline std::vector<std::uint8_t> make_synthetic_multi(std::size_t n_messages,
     return b;
 }
 
+/// Build a deterministic synthetic ITCH 5.0 stream that reconstructs into a
+/// **realistic, never-crossed** limit-order book — a clean L2 ladder around a
+/// tight spread, with churning depth and trade prints at the mid. Unlike
+/// `make_synthetic_itch` (a stress mix that lets resting orders pile up across the
+/// mid, since the engine is a reconstructor, not a matcher), every add here
+/// respects the current inside: a new bid is priced strictly below the best ask
+/// and a new ask strictly above the best bid, so `best_bid < best_ask` always
+/// holds. Used for the live L2 viewer demo. Single symbol (locate 1).
+inline std::vector<std::uint8_t> make_synthetic_book(std::size_t n_messages,
+                                                     std::uint32_t seed = 1) {
+    using namespace detail;
+    std::vector<std::uint8_t> b;
+    b.reserve(n_messages * 38);
+    std::vector<std::uint8_t> m;
+    m.reserve(64);
+    auto frame = [&]() {
+        be16(b, static_cast<std::uint16_t>(m.size()));
+        b.insert(b.end(), m.begin(), m.end());
+        m.clear();
+    };
+    std::mt19937 rng(seed);
+    auto pct = [&](int hi) { return static_cast<int>(rng() % static_cast<unsigned>(hi)); };
+
+    constexpr std::int64_t C        = 100;       // one cent, in ticks
+    const std::int64_t     seed_bid = 1001000;   // $100.10
+    const std::int64_t     seed_ask = 1001100;   // $100.11
+
+    std::vector<std::pair<std::uint64_t, char>> live;
+    std::vector<std::int64_t>                   px;   // price per live order (parallel)
+    std::uint64_t                               next_ref = 1;
+    std::uint64_t                               ts       = 34200ull * 1000000000ull;
+
+    auto best = [&](char side) -> std::int64_t {
+        bool         any = false;
+        std::int64_t v   = 0;
+        for (std::size_t i = 0; i < live.size(); ++i)
+            if (live[i].second == side) {
+                if (!any) { v = px[i]; any = true; }
+                else if (side == 'B' ? (px[i] > v) : (px[i] < v)) { v = px[i]; }
+            }
+        return any ? v : (side == 'B' ? seed_bid : seed_ask);
+    };
+    auto add = [&](char side) {
+        const std::int64_t bb = best('B'), ba = best('S');
+        std::int64_t       price = (side == 'B') ? (ba - C - static_cast<std::int64_t>(pct(10)) * C)
+                                                 : (bb + C + static_cast<std::int64_t>(pct(10)) * C);
+        if (price < C) price = C;
+        const std::uint64_t ref = next_ref++;
+        hdr(m, 'A', 1, ts);
+        be_n(m, ref, 8);
+        m.push_back(static_cast<std::uint8_t>(side));
+        be32(m, static_cast<std::uint32_t>(50 + pct(2500)));
+        stock8(m);
+        be32(m, static_cast<std::uint32_t>(price));
+        frame();
+        live.emplace_back(ref, side);
+        px.push_back(price);
+    };
+
+    std::size_t emitted = 0;
+    for (int i = 0; i < 20 && emitted < n_messages; ++i) {
+        add((i & 1) ? 'S' : 'B');
+        ++emitted;
+    }
+
+    while (emitted < n_messages) {
+        const int roll = pct(100);
+        if (roll < 42 || live.size() < 10) {
+            add((pct(2) == 0) ? 'B' : 'S');
+        } else if (roll < 64) {                          // execute (partial reduce)
+            const std::size_t i = static_cast<std::size_t>(rng() % live.size());
+            hdr(m, 'E', 1, ts);
+            be_n(m, live[i].first, 8);
+            be32(m, static_cast<std::uint32_t>(5 + pct(150)));
+            be_n(m, emitted, 8);
+            frame();
+        } else if (roll < 82) {                          // delete
+            const std::size_t i = static_cast<std::size_t>(rng() % live.size());
+            hdr(m, 'D', 1, ts);
+            be_n(m, live[i].first, 8);
+            frame();
+            live[i] = live.back();
+            live.pop_back();
+            px[i] = px.back();
+            px.pop_back();
+        } else {                                         // trade ('P') at the mid
+            const std::int64_t mid = (best('B') + best('S')) / 2;
+            hdr(m, 'P', 1, ts);
+            be_n(m, 0, 8);
+            m.push_back(static_cast<std::uint8_t>((pct(2) == 0) ? 'B' : 'S'));
+            be32(m, static_cast<std::uint32_t>(10 + pct(600)));
+            stock8(m);
+            be32(m, static_cast<std::uint32_t>(mid));
+            be_n(m, emitted, 8);
+            frame();
+        }
+        ts += 1 + static_cast<std::uint64_t>(pct(800));
+        ++emitted;
+    }
+    return b;
+}
+
 }  // namespace hftob

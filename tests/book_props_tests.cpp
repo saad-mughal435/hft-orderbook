@@ -11,6 +11,26 @@
 
 using namespace hftob;
 
+TEST_CASE("make_synthetic_book reconstructs a never-crossed book", "[book][prop]") {
+    const std::vector<std::uint8_t> data = make_synthetic_book(10000, 3);
+
+    OrderBook   book;
+    bool        crossed = false;
+    std::size_t checks  = 0;
+    for_each_framed_message(data.data(), data.size(), [&](const itch::Message& m) {
+        book.apply(m);
+        Price bp = 0, ap = 0;
+        Qty   bq = 0, aq = 0;
+        if (book.best_bid(bp, bq) && book.best_ask(ap, aq)) {
+            ++checks;
+            if (bp >= ap) crossed = true;  // best bid must be strictly below best ask
+        }
+    });
+    CHECK_FALSE(crossed);
+    CHECK(checks > 0);
+    CHECK(book.invariant_ok());
+}
+
 TEST_CASE("level totals stay consistent across a long synthetic replay", "[book][prop]") {
     const std::vector<std::uint8_t> data = make_synthetic_itch(20000, 12345);
 
