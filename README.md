@@ -21,13 +21,13 @@ design both simpler and faster than a generic matching engine.
 
 | Module | Responsibility |
 | ------ | -------------- |
-| `core/`  | integer prices, `ObjectPool`, pluggable level stores (`MapLevels` / `FlatLevels`), `alignas(64)` lock-free SPSC ring, latency histogram |
+| `core/`  | integer prices, `ObjectPool`, pluggable level stores (`MapLevels` / `FlatLevels` / `WindowedLevels`), `alignas(64)` lock-free SPSC ring, latency histogram, SHA-1/base64 |
 | `itch/`  | ITCH 5.0 message decode (manual big-endian) |
-| `feed/`  | BinaryFILE deframer, two-stage decode→book pipeline, deterministic synthetic-capture generator |
-| `book/`  | order-book reconstructor (pooled `order_ref → order`) + multi-symbol `BookSet` routed by `stock_locate` |
-| `mt5/`   | NDJSON bridge protocol (ticks / orders / acks + **depth publish**) + TCP server + mock client; `ITCHBridge.mq5` EA |
+| `feed/`  | BinaryFILE deframer, two-stage decode→book pipeline, **sharded** multi-threaded pipeline, dependency-free WebSocket codec, synthetic-capture generators |
+| `book/`  | order-book reconstructor (pooled `order_ref → order`) + multi-symbol `BookSet` (by `stock_locate`) + **microstructure metrics** + **trade tape** (VWAP / OHLCV) |
+| `mt5/`   | NDJSON bridge protocol (ticks / orders / acks + **depth** & **signal** publish) + TCP server + mock client; `ITCHBridge.mq5` EA |
 | `bench/` | Google Benchmark microbenchmarks (decode / book / SPSC) |
-| `apps/`  | `obreplay` (replay a capture, multi-symbol), `gencap` (write a capture), `mt5d` (MT5 bridge server) |
+| `apps/`  | `obreplay` (replay; multi-symbol, `--threads`, signals, `--bars`), `gencap`, `mt5d` (bridge), `wsbook` (WebSocket L2 streamer) |
 
 The ITCH decoder extracts every field by **explicit big-endian byte assembly** — never by
 casting a packed struct over the wire (the layouts are big-endian with misaligned multi-byte
@@ -91,6 +91,26 @@ ships all three, parity-tested (`map ≡ flat ≡ windowed`), so the trade-offs 
 > These are **relative, same-runner** figures on virtualized CI hardware — fair for an A/B, not HFT
 > numbers. Absolute p50/p99/p999 require pinning threads on bare metal; the method is documented —
 > run it on a real box. No fabricated figures here.
+
+## Analytics & live view
+
+A reconstructed book is only useful if it produces something. `book/metrics.hpp` derives the signals
+a desk actually watches — **micro-price** (size-weighted fair value), **order-book imbalance** (top
+and N-level), and the **spread** in ticks and bps — as pure functions over any book. `book/tape.hpp`
+tracks the **trade tape** (last, cumulative volume, **VWAP**, OHLCV bars) from the ITCH `P`/`Q`
+prints, distinct from the resting-liquidity book. `obreplay` prints both per symbol (`--bars` for the
+OHLCV ladder), and the MT5 bridge can publish them as `signal` messages.
+
+**Scaling.** `feed/sharded_pipeline.hpp` partitions symbols across `W` worker threads by
+`hash(stock_locate)`, each owning its books behind its own strictly-SPSC ring — the standard
+market-data scaling pattern. `obreplay --threads W --symbols K` runs it; it's parity-checked against
+the single-threaded path and ThreadSanitizer-gated.
+
+**Watch it live.** `wsbook` streams conflated L2 depth + signals as JSON over a **dependency-free
+WebSocket** (hand-rolled SHA-1 + RFC-6455 frame codec — no libraries), to a small browser
+[book viewer](https://saadm.dev/hft-book/viewer.html). `wsbook --dump N` records a real replay to
+NDJSON (that's how the viewer's bundled snapshot stream is produced — genuine engine output, not a
+mock).
 
 ## Quality
 
