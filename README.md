@@ -69,22 +69,24 @@ messages, and prints the busiest symbols' top-of-book plus a depth ladder.
 
 Microbenchmarks ([Google Benchmark](https://github.com/google/benchmark), `-DHFTOB_BUILD_BENCH=ON`)
 cover the decode and the per-op book mutation. The book is templated over its price-level store, so
-two implementations are compared head to head on the same workload — `MapLevels` (a `std::map`
-red-black tree) and `FlatLevels` (a cache-friendly sorted vector):
+**three** implementations are compared head to head on the *same* workload: `MapLevels` (a `std::map`
+red-black tree), `FlatLevels` (a cache-friendly sorted vector), and `WindowedLevels` (a price-tick-
+indexed array windowed around the inside — the canonical L2 structure):
 
 | benchmark (GitHub CI runner — **relative only**) | result |
 | --- | --- |
 | decode one ITCH message | ~5 ns |
 | SPSC ring push + pop | ~3 ns |
-| build a 10k-order book — `MapLevels` (std::map) | ~90 ns/msg (≈11 M msg/s) |
-| build a 10k-order book — `FlatLevels` (sorted vector) | ~120 ns/msg (≈8 M msg/s) |
+| build a 10k-order book — `MapLevels` (std::map) | ~89 ns/msg (≈11.2 M msg/s) |
+| build a 10k-order book — `FlatLevels` (sorted vector) | ~89 ns/msg (≈11.3 M msg/s) |
+| build a 10k-order book — `WindowedLevels` (tick-indexed array) | **~71 ns/msg (≈14.0 M msg/s)** |
 
-On this synthetic feed the `std::map` baseline is **~25–30% faster** than the flat-vector levels: the
-mid random-walks across ~100 price levels, so the flat vector pays an O(n) tail-shift on inserts and
-erases in the *middle* of the book, while the tree updates scattered levels in O(log n). Flat levels
-win the opposite workload — activity tightly clustered at the inside (a few levels, top-of-book
-churn), where front/back edits shift little. The engine ships **both**, parity-tested, so the
-trade-off is *measured*, not assumed.
+The **windowed array wins** — ~24% faster than the `std::map` baseline on this run — because an order
+keyed by price tick is an O(1) array index (and the best quote is a tracked index), versus the tree's
+O(log n) per op. `MapLevels` and `FlatLevels` land close here; their *relative* order is not stable
+across runs (an earlier run had flat ~25% slower — the flat vector pays an O(n) tail-shift when the mid
+walks across many levels). That instability is the point of reporting **same-run** numbers: the engine
+ships all three, parity-tested (`map ≡ flat ≡ windowed`), so the trade-offs are *measured*, not assumed.
 
 > These are **relative, same-runner** figures on virtualized CI hardware — fair for an A/B, not HFT
 > numbers. Absolute p50/p99/p999 require pinning threads on bare metal; the method is documented —
