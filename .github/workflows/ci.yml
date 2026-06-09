@@ -37,6 +37,9 @@ jobs:
       - name: FIX codec smoke
         run: ./build/fixsim
 
+      - name: MoldUDP64 receiver smoke
+        run: ./build/mdrecv --self 20000
+
       - name: Record book replay (real engine output, for the static viewer)
         run: ./build/wsbook --dump 72 --synthetic 7200 > book-replay.ndjson
 

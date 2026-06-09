@@ -52,6 +52,9 @@ if(UNIX)
 
   add_executable(wsbook apps/wsbook.cpp)
   target_link_libraries(wsbook PRIVATE hftob Threads::Threads)
+
+  add_executable(mdrecv apps/mdrecv.cpp)
+  target_link_libraries(mdrecv PRIVATE hftob)
 endif()
 
 # ---- benchmarks (opt-in: -DHFTOB_BUILD_BENCH=ON) --------------------------
@@ -104,6 +107,7 @@ if(HFTOB_BUILD_TESTS)
     tests/windowed_levels_tests.cpp
     tests/sha1_tests.cpp
     tests/fix_tests.cpp
+    tests/moldudp64_tests.cpp
     tests/spsc_tests.cpp
     tests/pipeline_tests.cpp
     tests/sharded_tests.cpp
@@ -123,5 +127,9 @@ if(HFTOB_BUILD_TESTS)
     add_executable(ws_itest tests/ws_itest.cpp)
     target_link_libraries(ws_itest PRIVATE hftob Catch2::Catch2WithMain Threads::Threads)
     add_test(NAME ws_integration COMMAND ws_itest)
+
+    add_executable(mold_itest tests/moldudp64_itest.cpp)
+    target_link_libraries(mold_itest PRIVATE hftob Catch2::Catch2WithMain Threads::Threads)
+    add_test(NAME moldudp64_integration COMMAND mold_itest)
   endif()
 endif()
