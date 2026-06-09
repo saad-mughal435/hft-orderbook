@@ -17,6 +17,7 @@
 
 #include <cerrno>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 
@@ -113,6 +114,35 @@ public:
         tv.tv_sec  = ms / 1000;
         tv.tv_usec = (ms % 1000) * 1000;
         ::setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    }
+
+    /// Raw binary send (all `n` bytes). For framed protocols (e.g. WebSocket) that
+    /// aren't line-delimited.
+    bool send_all(const char* data, std::size_t n) {
+        std::size_t sent = 0;
+        while (sent < n) {
+            const ssize_t k = ::send(fd_, data + sent, n - sent, 0);
+            if (k <= 0) return false;
+            sent += static_cast<std::size_t>(k);
+        }
+        return true;
+    }
+
+    /// Read exactly `n` bytes, draining any buffered (over-read) bytes first.
+    bool recv_exact(char* out, std::size_t n) {
+        std::size_t got = 0;
+        if (!buf_.empty()) {
+            const std::size_t take = (n < buf_.size()) ? n : buf_.size();
+            std::memcpy(out, buf_.data(), take);
+            buf_.erase(0, take);
+            got = take;
+        }
+        while (got < n) {
+            const ssize_t k = ::recv(fd_, out + got, n - got, 0);
+            if (k <= 0) return false;
+            got += static_cast<std::size_t>(k);
+        }
+        return true;
     }
 
     bool valid() const { return fd_ >= 0; }

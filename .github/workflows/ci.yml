@@ -34,6 +34,9 @@ jobs:
           ./build/gencap 20000 /tmp/synth.itch
           ./build/obreplay /tmp/synth.itch
 
+      - name: WebSocket snapshot dump smoke
+        run: ./build/wsbook --dump 40 --synthetic 8000 | head -3
+
   benchmarks:
     name: benchmarks (smoke)
     runs-on: ubuntu-latest
