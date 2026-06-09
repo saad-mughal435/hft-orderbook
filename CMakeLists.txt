@@ -33,6 +33,7 @@ if(HFTOB_BUILD_TESTS)
 
   add_executable(hftob_tests
     tests/itch_tests.cpp
+    tests/book_tests.cpp
   )
   target_link_libraries(hftob_tests PRIVATE hftob Catch2::Catch2WithMain)
 
