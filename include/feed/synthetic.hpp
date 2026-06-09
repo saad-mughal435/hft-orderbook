@@ -108,27 +108,27 @@ inline std::vector<std::uint8_t> make_synthetic_itch(std::size_t n_messages,
         const int roll = pct(100);
         if (live.size() < 8 || roll < 50) {      // ~50% adds (keeps the book deep)
             emit_add();
-        } else if (roll < 70) {                  // execute
+        } else if (roll < 66) {                  // execute
             const std::size_t i = pick();
             hdr(m, 'E', 1, ts);
             be_n(m, live[i].first, 8);
             be32(m, static_cast<std::uint32_t>(1 + pct(20)));
             be_n(m, emitted, 8);                 // match number
             frame();
-        } else if (roll < 82) {                  // cancel (partial)
+        } else if (roll < 78) {                  // cancel (partial)
             const std::size_t i = pick();
             hdr(m, 'X', 1, ts);
             be_n(m, live[i].first, 8);
             be32(m, static_cast<std::uint32_t>(1 + pct(20)));
             frame();
-        } else if (roll < 92) {                  // delete
+        } else if (roll < 88) {                  // delete
             const std::size_t i = pick();
             hdr(m, 'D', 1, ts);
             be_n(m, live[i].first, 8);
             frame();
             live[i] = live.back();               // swap-pop
             live.pop_back();
-        } else {                                 // replace (reprice/resize)
+        } else if (roll < 96) {                  // replace (reprice/resize)
             const std::size_t i    = pick();
             const char        side = live[i].second;
             const std::uint64_t nref = next_ref++;
@@ -139,6 +139,16 @@ inline std::vector<std::uint8_t> make_synthetic_itch(std::size_t n_messages,
             be32(m, static_cast<std::uint32_t>(add_px(side)));
             frame();
             live[i] = {nref, side};
+        } else {                                 // trade ('P') — tape-only, no book change
+            const char side = (pct(2) == 0) ? 'B' : 'S';
+            hdr(m, 'P', 1, ts);
+            be_n(m, 0, 8);                       // order_ref (unused by the tape)
+            m.push_back(static_cast<std::uint8_t>(side));
+            be32(m, static_cast<std::uint32_t>(1 + pct(200)));   // shares
+            stock8(m);
+            be32(m, static_cast<std::uint32_t>(mid));            // price at the mid
+            be_n(m, emitted, 8);                 // match number -> len 44
+            frame();
         }
         ts += 1 + static_cast<std::uint64_t>(pct(1000));
         ++emitted;

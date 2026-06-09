@@ -19,11 +19,14 @@
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "book/book_set.hpp"
+#include "book/metrics.hpp"
 #include "book/order_book.hpp"
+#include "book/tape.hpp"
 #include "core/latency_hist.hpp"
 #include "core/types.hpp"
 #include "feed/framing.hpp"
@@ -70,8 +73,8 @@ bool load_file(const std::string& path, std::vector<std::uint8_t>& out) {
 
 void usage() {
     std::cerr << "usage:\n"
-              << "  obreplay <capture.itch | capture.gz> [--symbol SYM]\n"
-              << "  obreplay --synthetic <N>             [--symbol SYM]\n";
+              << "  obreplay <capture.itch | capture.gz> [--symbol SYM] [--bars]\n"
+              << "  obreplay --synthetic <N>             [--symbol SYM] [--bars]\n";
 }
 
 std::string label(const BookSet& bs, std::uint16_t locate) {
@@ -101,9 +104,10 @@ void print_top(const BookSet& bs, std::uint16_t locate) {
 int main(int argc, char** argv) {
     std::vector<std::uint8_t> data;
     std::string               source;
-    std::string               focus;     // --symbol filter
+    std::string               focus;            // --symbol filter
     long                      synth = 0;
     std::string               file;
+    bool                      show_bars = false; // --bars
 
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -111,6 +115,8 @@ int main(int argc, char** argv) {
             focus = argv[++i];
         } else if (a == "--synthetic" && i + 1 < argc) {
             synth = std::strtol(argv[++i], nullptr, 10);
+        } else if (a == "--bars") {
+            show_bars = true;
         } else if (!a.empty() && a[0] != '-') {
             file = a;
         } else {
@@ -133,13 +139,20 @@ int main(int argc, char** argv) {
     if (data.empty()) { std::cerr << "error: empty input\n"; return 1; }
 
     // Pass 1: timed end-to-end throughput — one clock pair, no per-message timer
-    // overhead in the headline number. Routed multi-symbol through a BookSet.
-    BookSet    book;
+    // overhead in the headline number. Routed multi-symbol through a BookSet, with
+    // a per-symbol trade tape fed from the executions on the tape.
+    BookSet                                  book;
+    std::unordered_map<std::uint16_t, Tape>  tapes;
     std::size_t n = 0;
-    const auto t0 = Clock::now();
-    for_each_framed_message(data.data(), data.size(),
-                            [&](const itch::Message& m) { book.apply(m); ++n; });
-    const auto t1 = Clock::now();
+    const auto  t0 = Clock::now();
+    for_each_framed_message(data.data(), data.size(), [&](const itch::Message& m) {
+        book.apply(m);
+        if (m.type == itch::MsgType::Trade || m.type == itch::MsgType::CrossTrade)
+            tapes.try_emplace(m.stock_locate, /*bar_ns=*/1000000ull)
+                .first->second.on_trade(m.price, m.shares, m.timestamp);
+        ++n;
+    });
+    const auto   t1 = Clock::now();
     const double ns = std::chrono::duration<double, std::nano>(t1 - t0).count();
 
     // Pass 2: per-message decode+apply latency, for the tail shape. The two clock
@@ -215,6 +228,34 @@ int main(int argc, char** argv) {
         for (const auto& l : asks) std::cout << "  " << to_dollars(l.first) << "x" << l.second;
         if (asks.empty()) std::cout << "  (empty)";
         std::cout << "\n";
+
+        // Microstructure signals + trade tape for the focal symbol.
+        const BookMetrics mx = compute_metrics(*ob, 5);
+        if (mx.two_sided) {
+            std::cout << "signals:\n"
+                      << "  mid          " << mx.mid << "\n"
+                      << "  micro-price  " << mx.microprice << "\n"
+                      << "  spread       " << mx.spread_ticks << " ticks  ("
+                      << mx.spread_bps << " bps)\n"
+                      << "  imbalance    top " << mx.imbalance_top << "  / 5-level "
+                      << mx.imbalance_n << "\n";
+        }
+        auto tp = tapes.find(focus_locate);
+        if (tp != tapes.end() && tp->second.has_last()) {
+            const Tape& tape = tp->second;
+            std::cout << "tape:\n"
+                      << "  last         " << to_dollars(tape.last()) << "\n"
+                      << "  volume       " << tape.volume() << "\n"
+                      << "  vwap         " << tape.vwap() << "\n";
+            if (show_bars) {
+                const auto bars = tape.bars(true);
+                std::cout << "  OHLCV bars (" << bars.size() << "):\n";
+                for (const auto& bar : bars)
+                    std::cout << "    o " << to_dollars(bar.open) << "  h " << to_dollars(bar.high)
+                              << "  l " << to_dollars(bar.low) << "  c " << to_dollars(bar.close)
+                              << "  v " << bar.volume << "  vwap " << bar.vwap << "\n";
+            }
+        }
     }
     std::cout << "\n";
 

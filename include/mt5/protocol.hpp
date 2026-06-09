@@ -27,7 +27,7 @@ namespace mt5 {
 
 constexpr int kProtocolVersion = 1;
 
-enum class MsgKind { Unknown, Hello, Subscribe, Tick, Order, Ack, Nop, Bye, Heartbeat, Depth };
+enum class MsgKind { Unknown, Hello, Subscribe, Tick, Order, Ack, Nop, Bye, Heartbeat, Depth, Signal };
 
 struct Tick {
     std::string   symbol;
@@ -165,6 +165,7 @@ inline MsgKind kind_of(const std::string& line) {
     if (t == "bye")       return MsgKind::Bye;
     if (t == "heartbeat") return MsgKind::Heartbeat;
     if (t == "depth")     return MsgKind::Depth;
+    if (t == "signal")    return MsgKind::Signal;
     return MsgKind::Unknown;
 }
 
@@ -303,6 +304,27 @@ inline bool parse_depth(const std::string& line, std::string& symbol,
     if (!json_get_str(line, "symbol", symbol)) return false;
     parse_levels(line, "bids", bids);
     parse_levels(line, "asks", asks);
+    return true;
+}
+
+/// A derived-signal message: the engine's microstructure read for a symbol (mid,
+/// micro-price, top-of-book imbalance, spread in bps) streamed out to subscribers.
+inline std::string encode_signal(const std::string& symbol, double mid, double microprice,
+                                 double imbalance, double spread_bps) {
+    return "{\"t\":\"signal\",\"v\":" + std::to_string(kProtocolVersion) +
+           ",\"symbol\":\"" + detail::esc(symbol) + "\"" +
+           ",\"mid\":" + detail::fmt_double(mid) +
+           ",\"microprice\":" + detail::fmt_double(microprice) +
+           ",\"imbalance\":" + detail::fmt_double(imbalance) +
+           ",\"spread_bps\":" + detail::fmt_double(spread_bps) + "}\n";
+}
+inline bool parse_signal(const std::string& line, std::string& symbol, double& mid,
+                         double& microprice, double& imbalance, double& spread_bps) {
+    if (!json_get_str(line, "symbol", symbol)) return false;
+    json_get_double(line, "mid", mid);
+    json_get_double(line, "microprice", microprice);
+    json_get_double(line, "imbalance", imbalance);
+    json_get_double(line, "spread_bps", spread_bps);
     return true;
 }
 

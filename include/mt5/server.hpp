@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 
+#include "book/metrics.hpp"
 #include "mt5/protocol.hpp"
 #include "mt5/tcp.hpp"
 
@@ -83,6 +84,7 @@ BridgeStats run_bridge(LineSocket& sock, Strategy& strat,
             case MsgKind::Order:
             case MsgKind::Nop:
             case MsgKind::Depth:
+            case MsgKind::Signal:
             case MsgKind::Unknown:
             default:
                 break;  // ignore anything unexpected
@@ -98,6 +100,16 @@ template <typename Book>
 bool publish_depth(LineSocket& sock, const std::string& symbol, const Book& book,
                    std::size_t n) {
     return sock.send_line(encode_depth(symbol, book.bids(n), book.asks(n)));
+}
+
+/// Publish the engine's microstructure signal (mid / micro-price / imbalance /
+/// spread bps) for `symbol`, computed from the reconstructed `book`.
+template <typename Book>
+bool publish_signal(LineSocket& sock, const std::string& symbol, const Book& book,
+                    std::size_t n = 5) {
+    const BookMetrics m = compute_metrics(book, n);
+    return sock.send_line(
+        encode_signal(symbol, m.mid, m.microprice, m.imbalance_top, m.spread_bps));
 }
 
 }  // namespace mt5

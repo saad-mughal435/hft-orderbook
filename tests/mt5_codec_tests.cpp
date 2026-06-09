@@ -159,3 +159,17 @@ TEST_CASE("empty depth ladders round-trip", "[mt5][codec]") {
     CHECK(b.empty());
     CHECK(a.empty());
 }
+
+TEST_CASE("signal message round-trips its scalars", "[mt5][codec]") {
+    const std::string line = encode_signal("AAPL", 100.005, 100.0067, 0.3333, 0.9999);
+    CHECK(kind_of(line) == MsgKind::Signal);
+
+    std::string sym;
+    double      mid = 0, mp = 0, imb = 0, bps = 0;
+    REQUIRE(parse_signal(line, sym, mid, mp, imb, bps));
+    CHECK(sym == "AAPL");
+    CHECK_THAT(mid, WithinAbs(100.005, 1e-6));
+    CHECK_THAT(mp, WithinAbs(100.0067, 1e-6));
+    CHECK_THAT(imb, WithinAbs(0.3333, 1e-6));
+    CHECK_THAT(bps, WithinAbs(0.9999, 1e-6));
+}

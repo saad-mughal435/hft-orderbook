@@ -167,3 +167,32 @@ TEST_CASE("depth publish: an engine book streams to a client over TCP",
     CHECK(asks[0].first == 1000100);
     CHECK(asks[0].second == 150u);
 }
+
+TEST_CASE("signal publish: engine microstructure read streams to a client over TCP",
+          "[mt5][itest][signal]") {
+    Listener            listener(0);
+    const std::uint16_t port = listener.port();
+
+    std::thread server([&] {
+        LineSocket conn = listener.accept();
+        OrderBook  book;
+        book.add(1, Side::Buy, 1000000, 100);   // bid $100.00 x100
+        book.add(2, Side::Sell, 1000100, 50);   // ask $100.01 x50
+        publish_signal(conn, "AAPL", book, 5);
+    });
+
+    LineSocket  client = LineSocket::connect("127.0.0.1", port);
+    std::string line;
+    REQUIRE(client.recv_line(line));
+    CHECK(kind_of(line) == MsgKind::Signal);
+
+    std::string sym;
+    double      mid = 0, mp = 0, imb = 0, bps = 0;
+    REQUIRE(parse_signal(line, sym, mid, mp, imb, bps));
+    server.join();
+
+    CHECK(sym == "AAPL");
+    CHECK(mid > 100.0);
+    CHECK(mid < 100.01);
+    CHECK(imb > 0.0);   // more bid size than ask -> positive imbalance
+}
