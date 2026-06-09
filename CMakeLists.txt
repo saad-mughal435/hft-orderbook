@@ -41,6 +41,12 @@ endif()
 add_executable(gencap apps/gencap.cpp)
 target_link_libraries(gencap PRIVATE hftob)
 
+# mt5d: the MetaTrader 5 bridge server (POSIX sockets -> Linux/macOS only).
+if(UNIX)
+  add_executable(mt5d apps/mt5d.cpp)
+  target_link_libraries(mt5d PRIVATE hftob Threads::Threads)
+endif()
+
 # ---- benchmarks (opt-in: -DHFTOB_BUILD_BENCH=ON) --------------------------
 option(HFTOB_BUILD_BENCH "Build Google Benchmark microbenchmarks" OFF)
 if(HFTOB_BUILD_BENCH)
@@ -76,9 +82,17 @@ if(HFTOB_BUILD_TESTS)
     tests/book_tests.cpp
     tests/spsc_tests.cpp
     tests/pipeline_tests.cpp
+    tests/mt5_codec_tests.cpp
   )
   target_link_libraries(hftob_tests PRIVATE hftob Catch2::Catch2WithMain Threads::Threads)
 
   enable_testing()
   add_test(NAME unit COMMAND hftob_tests)
+
+  # MT5 bridge integration test drives a real loopback TCP socket (POSIX only).
+  if(UNIX)
+    add_executable(mt5_itest tests/mt5_itest.cpp)
+    target_link_libraries(mt5_itest PRIVATE hftob Catch2::Catch2WithMain Threads::Threads)
+    add_test(NAME mt5_integration COMMAND mt5_itest)
+  endif()
 endif()
