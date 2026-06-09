@@ -1,13 +1,26 @@
 # hft-orderbook
 
-A low-latency **C++17** market-data engine that reconstructs a live limit-order book
-from the real **NASDAQ TotalView-ITCH 5.0** feed, with a pluggable adapter layer so the
-same engine also runs against **MetaTrader 5** (live ticks in / orders out).
+A low-latency **C++17** trading-infrastructure project. It reconstructs live limit-order books from
+the real **NASDAQ TotalView-ITCH 5.0** feed — over both **BinaryFILE** captures and the **MoldUDP64**
+UDP multicast transport — derives microstructure signals, and speaks **FIX 4.4** order entry plus a
+**MetaTrader 5** bridge. Built the way trading systems are: **lock-free / wait-free**, no hot-path
+allocation, cache-line-disciplined, sharded across cores, and **sanitizer- and fuzz-hardened**.
 
 [![CI](https://github.com/saad-mughal435/hft-orderbook/actions/workflows/ci.yml/badge.svg)](https://github.com/saad-mughal435/hft-orderbook/actions/workflows/ci.yml)
 
-> **Status: feature-complete.** ITCH 5.0 decoder ✅ · order-book reconstructor ✅ · lock-free SPSC
-> pipeline ✅ · benchmarks + replay ✅ · MT5 bridge ✅ — built phase by phase, each verified in CI.
+**What it demonstrates** — for an HFT/low-latency C++ role:
+- **Ultra-low-latency C++** — lock-free/wait-free SPSC ring, `PAUSE` busy-wait, object-pooled and
+  integer-priced hot path, a price-tick-indexed book (`docs/PERFORMANCE.md`).
+- **Market connectivity** — ITCH 5.0 decode (manual big-endian), the **MoldUDP64** UDP feed with
+  sequence-gap detection, and a dependency-free WebSocket publisher.
+- **Order entry** — a **FIX 4.4** codec (NewOrderSingle / ExecutionReport, BodyLength + CheckSum).
+- **Distributed / scale** — symbols **sharded** across worker threads, one SPSC ring per core.
+- **Rigour** — 6 CI jobs: build+test, **ThreadSanitizer**, ASan/UBSan, clang **`-Werror`**, **libFuzzer**,
+  benchmarks.
+
+> **Status: feature-complete & hardened.** ITCH 5.0 decoder ✅ · order-book reconstructor ✅ · lock-free
+> + sharded pipeline ✅ · benchmarks + replay ✅ · **MoldUDP64 UDP** ✅ · **FIX 4.4** ✅ · MT5 bridge ✅ ·
+> live L2 viewer ✅ — built phase by phase, each verified in CI.
 
 ## Why a *reconstructor*, not a matching engine
 
@@ -21,13 +34,14 @@ design both simpler and faster than a generic matching engine.
 
 | Module | Responsibility |
 | ------ | -------------- |
-| `core/`  | integer prices, `ObjectPool`, pluggable level stores (`MapLevels` / `FlatLevels` / `WindowedLevels`), `alignas(64)` lock-free SPSC ring, latency histogram, SHA-1/base64 |
+| `core/`  | integer prices, `ObjectPool`, pluggable level stores (`MapLevels` / `FlatLevels` / `WindowedLevels`), `alignas(64)` lock-free SPSC ring, `cpu_relax`/`rdtsc`/`pin_this_thread`, latency histogram, SHA-1/base64 |
 | `itch/`  | ITCH 5.0 message decode (manual big-endian) |
-| `feed/`  | BinaryFILE deframer, two-stage decode→book pipeline, **sharded** multi-threaded pipeline, dependency-free WebSocket codec, synthetic-capture generators |
+| `feed/`  | BinaryFILE deframer, **MoldUDP64** UDP feed framing + UDP socket, two-stage + **sharded** decode→book pipelines, dependency-free WebSocket codec, synthetic generators |
 | `book/`  | order-book reconstructor (pooled `order_ref → order`) + multi-symbol `BookSet` (by `stock_locate`) + **microstructure metrics** + **trade tape** (VWAP / OHLCV) |
+| `fix/`   | **FIX 4.4** order-entry codec — tags/enums + message builder/parser (auto BodyLength + CheckSum), NewOrderSingle / ExecutionReport |
 | `mt5/`   | NDJSON bridge protocol (ticks / orders / acks + **depth** & **signal** publish) + TCP server + mock client; `ITCHBridge.mq5` EA |
 | `bench/` | Google Benchmark microbenchmarks (decode / book / SPSC) |
-| `apps/`  | `obreplay` (replay; multi-symbol, `--threads`, signals, `--bars`), `gencap`, `mt5d` (bridge), `wsbook` (WebSocket L2 streamer) |
+| `apps/`  | `obreplay` (multi-symbol, `--threads`, signals), `mdrecv` (MoldUDP64 UDP), `wsbook` (WebSocket L2), `mt5d` (bridge), `fixsim`, `gencap` |
 
 The ITCH decoder extracts every field by **explicit big-endian byte assembly** — never by
 casting a packed struct over the wire (the layouts are big-endian with misaligned multi-byte
