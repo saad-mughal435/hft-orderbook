@@ -141,6 +141,33 @@ public:
     std::vector<std::pair<Price, Qty>> bids(std::size_t n) const { return depth(Side::Buy, n); }
     std::vector<std::pair<Price, Qty>> asks(std::size_t n) const { return depth(Side::Sell, n); }
 
+    /// Recompute every price level's quantity from the order map and check it
+    /// matches the incrementally-maintained level totals — the core consistency
+    /// invariant of the reconstructor. Also verifies each resting order is
+    /// non-zero with a real side. O(orders); for tests/asserts, not the hot path.
+    bool invariant_ok() const {
+        std::map<Price, Qty, std::greater<Price>> rebuilt_bids;
+        std::map<Price, Qty>                      rebuilt_asks;
+        for (const auto& kv : orders_) {
+            const Order& o = kv.second;
+            if (o.shares == 0) return false;             // zeroed orders must be gone
+            if (o.side == Side::Buy)       rebuilt_bids[o.price] += o.shares;
+            else if (o.side == Side::Sell) rebuilt_asks[o.price] += o.shares;
+            else                           return false;  // resting order needs a side
+        }
+        if (rebuilt_bids.size() != bids_.size()) return false;
+        if (rebuilt_asks.size() != asks_.size()) return false;
+        for (const auto& kv : rebuilt_bids) {
+            auto it = bids_.find(kv.first);
+            if (it == bids_.end() || it->second != kv.second) return false;
+        }
+        for (const auto& kv : rebuilt_asks) {
+            auto it = asks_.find(kv.first);
+            if (it == asks_.end() || it->second != kv.second) return false;
+        }
+        return true;
+    }
+
 private:
     void decrement_level(Side side, Price price, Qty d) {
         if (side == Side::Buy) {

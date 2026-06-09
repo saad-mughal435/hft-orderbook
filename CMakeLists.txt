@@ -66,6 +66,15 @@ if(HFTOB_BUILD_BENCH)
   target_link_libraries(hftob_bench PRIVATE hftob benchmark::benchmark Threads::Threads)
 endif()
 
+# ---- fuzzing (opt-in: -DHFTOB_BUILD_FUZZ=ON, clang only) ------------------
+option(HFTOB_BUILD_FUZZ "Build the libFuzzer decode harness (clang only)" OFF)
+if(HFTOB_BUILD_FUZZ)
+  add_executable(decode_fuzz fuzz/decode_fuzz.cpp)
+  target_link_libraries(decode_fuzz PRIVATE hftob)
+  target_compile_options(decode_fuzz PRIVATE -g -O1 -fsanitize=fuzzer,address)
+  target_link_options(decode_fuzz PRIVATE -fsanitize=fuzzer,address)
+endif()
+
 # ---- tests ----------------------------------------------------------------
 option(HFTOB_BUILD_TESTS "Build unit tests" ON)
 if(HFTOB_BUILD_TESTS)
@@ -80,6 +89,7 @@ if(HFTOB_BUILD_TESTS)
   add_executable(hftob_tests
     tests/itch_tests.cpp
     tests/book_tests.cpp
+    tests/book_props_tests.cpp
     tests/spsc_tests.cpp
     tests/pipeline_tests.cpp
     tests/mt5_codec_tests.cpp

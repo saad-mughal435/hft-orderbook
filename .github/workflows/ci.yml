@@ -47,3 +47,70 @@ jobs:
 
       - name: Run benchmark smoke (tiny time budget)
         run: ./build/hftob_bench --benchmark_min_time=0.02s
+
+  sanitizers:
+    name: sanitizers (${{ matrix.san }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - san: thread
+            flags: "-fsanitize=thread -fno-omit-frame-pointer -g -O1"
+          - san: address-undefined
+            flags: "-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g -O1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (${{ matrix.san }})
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="${{ matrix.flags }}"
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test under sanitizer
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Replay smoke under sanitizer
+        run: ./build/obreplay --synthetic 20000 > /dev/null
+
+  warnings:
+    name: clang -Werror (lib + apps)
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (clang, -Werror, tests/bench off)
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          -DHFTOB_BUILD_TESTS=OFF -DHFTOB_BUILD_BENCH=OFF
+          -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror"
+
+      - name: Build
+        run: cmake --build build -j
+
+  fuzz:
+    name: fuzz (decode, libFuzzer)
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (fuzz on, clang)
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+          -DHFTOB_BUILD_FUZZ=ON -DHFTOB_BUILD_TESTS=OFF -DHFTOB_BUILD_BENCH=OFF
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Seed corpus + fuzz (short session)
+        run: |
+          mkdir -p corpus
+          ./build/gencap 3000 corpus/seed.itch
+          ./build/decode_fuzz -max_total_time=25 -runs=300000 corpus

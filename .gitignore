@@ -5,6 +5,13 @@ cmake-build-*/
 *.obj
 *.exe
 *.gz
+*.itch
 data/
 .cache/
 .DS_Store
+
+# fuzzing
+corpus/
+crash-*
+leak-*
+timeout-*
