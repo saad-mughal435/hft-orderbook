@@ -156,4 +156,105 @@ inline std::vector<std::uint8_t> make_synthetic_itch(std::size_t n_messages,
     return b;
 }
 
+/// Build a deterministic **multi-symbol** synthetic ITCH 5.0 stream: a
+/// StockDirectory (`R`) per symbol (locates 1..n_symbols, named `SYNnn`) followed
+/// by orders interleaved across all symbols, each carrying its symbol's
+/// `stock_locate`. This makes the multi-symbol and sharded paths demonstrable in
+/// CI and `obreplay` without a multi-GB real capture. BinaryFILE-framed.
+inline std::vector<std::uint8_t> make_synthetic_multi(std::size_t n_messages,
+                                                      unsigned n_symbols,
+                                                      std::uint32_t seed = 1) {
+    using namespace detail;
+    if (n_symbols < 1) n_symbols = 1;
+
+    std::vector<std::uint8_t> b;
+    b.reserve(n_messages * 38);
+    std::vector<std::uint8_t> m;
+    m.reserve(64);
+    auto frame = [&]() {
+        be16(b, static_cast<std::uint16_t>(m.size()));
+        b.insert(b.end(), m.begin(), m.end());
+        m.clear();
+    };
+
+    std::mt19937 rng(seed);
+    auto pct = [&](int hi) { return static_cast<int>(rng() % static_cast<unsigned>(hi)); };
+
+    struct Sym {
+        std::int64_t                                mid;
+        std::vector<std::pair<std::uint64_t, char>> live;
+    };
+    std::vector<Sym> syms(n_symbols);
+    for (unsigned s = 0; s < n_symbols; ++s)
+        syms[s].mid = 1000000 + static_cast<std::int64_t>(s) * 5000;  // distinct mids
+
+    std::uint64_t next_ref = 1;
+    std::uint64_t ts       = 34200ull * 1000000000ull;
+    std::size_t   emitted  = 0;
+
+    // One StockDirectory per symbol so the books can be named.
+    for (unsigned s = 0; s < n_symbols && emitted < n_messages; ++s) {
+        hdr(m, 'R', static_cast<std::uint16_t>(s + 1), ts);
+        char sym[8] = {'S', 'Y', 'N', ' ', ' ', ' ', ' ', ' '};
+        sym[3] = static_cast<char>('0' + (s / 10) % 10);
+        sym[4] = static_cast<char>('0' + s % 10);
+        for (int i = 0; i < 8; ++i) m.push_back(static_cast<std::uint8_t>(sym[i]));
+        while (m.size() < 39) m.push_back(0);   // pad to the 39-byte 'R' length
+        frame();
+        ++emitted;
+    }
+
+    while (emitted < n_messages) {
+        const unsigned      s      = static_cast<unsigned>(rng() % n_symbols);
+        const std::uint16_t locate = static_cast<std::uint16_t>(s + 1);
+        Sym&                sym    = syms[s];
+        if (pct(8) == 0) {
+            sym.mid += (pct(2) ? 100 : -100);
+            if (sym.mid < 1000) sym.mid = 1000;
+        }
+        auto add_px = [&](char side) {
+            const std::int64_t off = (side == 'B') ? -(1 + pct(50)) : (1 + pct(50));
+            std::int64_t       px  = sym.mid + off * 100;
+            return px < 100 ? std::int64_t{100} : px;
+        };
+
+        const int roll = pct(100);
+        if (sym.live.size() < 4 || roll < 55) {       // add
+            const char          side = (pct(2) == 0) ? 'B' : 'S';
+            const std::uint64_t ref  = next_ref++;
+            hdr(m, 'A', locate, ts);
+            be_n(m, ref, 8);
+            m.push_back(static_cast<std::uint8_t>(side));
+            be32(m, static_cast<std::uint32_t>(10 + pct(990)));
+            stock8(m);
+            be32(m, static_cast<std::uint32_t>(add_px(side)));
+            frame();
+            sym.live.emplace_back(ref, side);
+        } else if (roll < 72) {                        // execute
+            const std::size_t i = static_cast<std::size_t>(rng() % sym.live.size());
+            hdr(m, 'E', locate, ts);
+            be_n(m, sym.live[i].first, 8);
+            be32(m, static_cast<std::uint32_t>(1 + pct(20)));
+            be_n(m, emitted, 8);
+            frame();
+        } else if (roll < 84) {                        // cancel
+            const std::size_t i = static_cast<std::size_t>(rng() % sym.live.size());
+            hdr(m, 'X', locate, ts);
+            be_n(m, sym.live[i].first, 8);
+            be32(m, static_cast<std::uint32_t>(1 + pct(20)));
+            frame();
+        } else {                                       // delete
+            const std::size_t i = static_cast<std::size_t>(rng() % sym.live.size());
+            hdr(m, 'D', locate, ts);
+            be_n(m, sym.live[i].first, 8);
+            frame();
+            sym.live[i] = sym.live.back();
+            sym.live.pop_back();
+        }
+        ts += 1 + static_cast<std::uint64_t>(pct(1000));
+        ++emitted;
+    }
+    return b;
+}
+
 }  // namespace hftob

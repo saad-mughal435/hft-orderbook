@@ -26,6 +26,9 @@ jobs:
       - name: Replay smoke (synthetic stream)
         run: ./build/obreplay --synthetic 50000
 
+      - name: Replay smoke (multi-symbol, sharded)
+        run: ./build/obreplay --synthetic 50000 --symbols 16 --threads 4 > /dev/null
+
       - name: Replay smoke (generated capture file)
         run: |
           ./build/gencap 20000 /tmp/synth.itch
@@ -73,6 +76,9 @@ jobs:
 
       - name: Replay smoke under sanitizer
         run: ./build/obreplay --synthetic 20000 > /dev/null
+
+      - name: Sharded replay smoke under sanitizer
+        run: ./build/obreplay --synthetic 20000 --symbols 12 --threads 4 > /dev/null
 
   warnings:
     name: clang -Werror (lib + apps)

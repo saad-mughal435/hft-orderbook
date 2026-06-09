@@ -30,6 +30,7 @@
 #include "core/latency_hist.hpp"
 #include "core/types.hpp"
 #include "feed/framing.hpp"
+#include "feed/sharded_pipeline.hpp"
 #include "feed/synthetic.hpp"
 #include "itch/decoder.hpp"
 #include "itch/messages.hpp"
@@ -73,8 +74,8 @@ bool load_file(const std::string& path, std::vector<std::uint8_t>& out) {
 
 void usage() {
     std::cerr << "usage:\n"
-              << "  obreplay <capture.itch | capture.gz> [--symbol SYM] [--bars]\n"
-              << "  obreplay --synthetic <N>             [--symbol SYM] [--bars]\n";
+              << "  obreplay <capture.itch | capture.gz> [--symbol SYM] [--bars] [--threads W]\n"
+              << "  obreplay --synthetic <N> [--symbols K] [--symbol SYM] [--bars] [--threads W]\n";
 }
 
 std::string label(const BookSet& bs, std::uint16_t locate) {
@@ -108,6 +109,8 @@ int main(int argc, char** argv) {
     long                      synth = 0;
     std::string               file;
     bool                      show_bars = false; // --bars
+    long                      threads   = 1;     // --threads (sharded replay)
+    long                      symbols   = 1;     // --symbols (synthetic multi-symbol)
 
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -115,6 +118,10 @@ int main(int argc, char** argv) {
             focus = argv[++i];
         } else if (a == "--synthetic" && i + 1 < argc) {
             synth = std::strtol(argv[++i], nullptr, 10);
+        } else if (a == "--threads" && i + 1 < argc) {
+            threads = std::strtol(argv[++i], nullptr, 10);
+        } else if (a == "--symbols" && i + 1 < argc) {
+            symbols = std::strtol(argv[++i], nullptr, 10);
         } else if (a == "--bars") {
             show_bars = true;
         } else if (!a.empty() && a[0] != '-') {
@@ -124,10 +131,15 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
+    if (threads < 1) threads = 1;
 
     if (synth > 0) {
-        data   = make_synthetic_itch(static_cast<std::size_t>(synth));
-        source = "synthetic(" + std::to_string(synth) + ")";
+        data   = (symbols > 1)
+                     ? make_synthetic_multi(static_cast<std::size_t>(synth),
+                                            static_cast<unsigned>(symbols))
+                     : make_synthetic_itch(static_cast<std::size_t>(synth));
+        source = "synthetic(" + std::to_string(synth) +
+                 (symbols > 1 ? ", " + std::to_string(symbols) + " symbols)" : ")");
     } else if (!file.empty()) {
         if (!load_file(file, data)) return 1;
         source = file;
@@ -138,22 +150,27 @@ int main(int argc, char** argv) {
 
     if (data.empty()) { std::cerr << "error: empty input\n"; return 1; }
 
-    // Pass 1: timed end-to-end throughput — one clock pair, no per-message timer
-    // overhead in the headline number. Routed multi-symbol through a BookSet, with
-    // a per-symbol trade tape fed from the executions on the tape.
-    BookSet                                  book;
-    std::unordered_map<std::uint16_t, Tape>  tapes;
-    std::size_t n = 0;
+    // Pass 1: timed end-to-end throughput — single-threaded, or sharded across
+    // worker threads with --threads. One clock pair, no per-message timer overhead.
+    BookSet     book;
+    std::size_t n  = 0;
     const auto  t0 = Clock::now();
+    if (threads > 1) {
+        n = replay_sharded(data.data(), data.size(), book, static_cast<unsigned>(threads));
+    } else {
+        for_each_framed_message(data.data(), data.size(),
+                                [&](const itch::Message& m) { book.apply(m); ++n; });
+    }
+    const auto   t1 = Clock::now();
+    const double ns = std::chrono::duration<double, std::nano>(t1 - t0).count();
+
+    // Per-symbol trade tape (untimed, single pass over the executions on the tape).
+    std::unordered_map<std::uint16_t, Tape> tapes;
     for_each_framed_message(data.data(), data.size(), [&](const itch::Message& m) {
-        book.apply(m);
         if (m.type == itch::MsgType::Trade || m.type == itch::MsgType::CrossTrade)
             tapes.try_emplace(m.stock_locate, /*bar_ns=*/1000000ull)
                 .first->second.on_trade(m.price, m.shares, m.timestamp);
-        ++n;
     });
-    const auto   t1 = Clock::now();
-    const double ns = std::chrono::duration<double, std::nano>(t1 - t0).count();
 
     // Pass 2: per-message decode+apply latency, for the tail shape. The two clock
     // reads per message add overhead (documented), but the distribution's *shape*

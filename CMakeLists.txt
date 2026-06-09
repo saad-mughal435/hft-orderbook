@@ -97,6 +97,7 @@ if(HFTOB_BUILD_TESTS)
     tests/windowed_levels_tests.cpp
     tests/spsc_tests.cpp
     tests/pipeline_tests.cpp
+    tests/sharded_tests.cpp
     tests/mt5_codec_tests.cpp
   )
   target_link_libraries(hftob_tests PRIVATE hftob Catch2::Catch2WithMain Threads::Threads)

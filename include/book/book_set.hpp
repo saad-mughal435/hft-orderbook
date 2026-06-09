@@ -63,6 +63,16 @@ public:
         return n;
     }
 
+    /// Move another set's books/symbols into this one. Used to merge disjoint
+    /// shards after a sharded replay (each locate lives in exactly one shard, so
+    /// there are no key collisions).
+    void merge_from(BookSet& other) {
+        for (auto& kv : other.books_) books_.emplace(kv.first, std::move(kv.second));
+        for (auto& kv : other.symbols_) symbols_.emplace(kv.first, std::move(kv.second));
+        other.books_.clear();
+        other.symbols_.clear();
+    }
+
     const std::unordered_map<std::uint16_t, OrderBook>& books() const { return books_; }
 
 private:
