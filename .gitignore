@@ -1,0 +1,10 @@
+build/
+out/
+cmake-build-*/
+*.o
+*.obj
+*.exe
+*.gz
+data/
+.cache/
+.DS_Store
