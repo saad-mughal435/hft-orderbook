@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "core/types.hpp"
 
@@ -25,7 +27,7 @@ namespace mt5 {
 
 constexpr int kProtocolVersion = 1;
 
-enum class MsgKind { Unknown, Hello, Subscribe, Tick, Order, Ack, Nop, Bye, Heartbeat };
+enum class MsgKind { Unknown, Hello, Subscribe, Tick, Order, Ack, Nop, Bye, Heartbeat, Depth };
 
 struct Tick {
     std::string   symbol;
@@ -52,27 +54,53 @@ struct Ack {
     std::string   message;
 };
 
-// ---- minimal flat-JSON field extraction -----------------------------------
-// Tolerant single-pass helpers for the controlled schema above. Not a general
-// JSON parser: values are assumed unnested and string values free of escapes.
+// ---- flat-JSON field extraction -------------------------------------------
+// Single-pass helpers for the controlled schema above. Not a general JSON parser
+// (values are unnested apart from the depth ladders), but it is robust where it
+// matters: a key is only matched at a real object-key position (preceded by '{'
+// or ',' and followed by ':'), so a key name appearing inside a string *value*
+// is never mistaken for the field, and string reads honour `\"` / `\\` escapes.
 
 namespace detail {
 
 inline std::size_t value_pos(const std::string& s, const std::string& key) {
     const std::string pat = "\"" + key + "\"";
-    std::size_t k = s.find(pat);
-    if (k == std::string::npos) return std::string::npos;
-    std::size_t c = s.find(':', k + pat.size());
-    if (c == std::string::npos) return std::string::npos;
-    std::size_t i = c + 1;
-    while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
-    return i;
+    std::size_t from = 0;
+    for (;;) {
+        const std::size_t k = s.find(pat, from);
+        if (k == std::string::npos) return std::string::npos;
+        // The match must be a key: the previous non-space char is '{' or ','.
+        std::size_t p = k;
+        while (p > 0 && (s[p - 1] == ' ' || s[p - 1] == '\t')) --p;
+        const bool at_key = (p == 0) || (s[p - 1] == '{') || (s[p - 1] == ',');
+        // ...and it must be followed by ':'.
+        std::size_t c = k + pat.size();
+        while (c < s.size() && (s[c] == ' ' || s[c] == '\t')) ++c;
+        if (at_key && c < s.size() && s[c] == ':') {
+            std::size_t i = c + 1;
+            while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
+            return i;
+        }
+        from = k + 1;  // false positive (e.g. inside a value); keep scanning
+    }
 }
 
 inline std::string fmt_double(double v) {
     char b[32];
     std::snprintf(b, sizeof(b), "%.10g", v);
     return std::string(b);
+}
+
+inline std::string esc(const std::string& s) {  // escape for a JSON string value
+    std::string o;
+    o.reserve(s.size() + 2);
+    for (const char c : s) {
+        if (c == '"' || c == '\\') { o.push_back('\\'); o.push_back(c); }
+        else if (c == '\n')        { o += "\\n"; }
+        else if (c == '\t')        { o += "\\t"; }
+        else                       { o.push_back(c); }
+    }
+    return o;
 }
 
 }  // namespace detail
@@ -82,10 +110,20 @@ inline bool json_get_str(const std::string& s, const std::string& key, std::stri
     if (i == std::string::npos || i >= s.size() || s[i] != '"') return false;
     ++i;
     std::string r;
-    while (i < s.size() && s[i] != '"') r.push_back(s[i++]);
-    if (i >= s.size()) return false;  // unterminated string
-    out.swap(r);
-    return true;
+    while (i < s.size()) {
+        const char ch = s[i];
+        if (ch == '\\' && i + 1 < s.size()) {       // unescape \" \\ \/ \n \t
+            const char nx = s[i + 1];
+            if (nx == '"' || nx == '\\' || nx == '/') { r.push_back(nx); i += 2; continue; }
+            if (nx == 'n') { r.push_back('\n'); i += 2; continue; }
+            if (nx == 't') { r.push_back('\t'); i += 2; continue; }
+            r.push_back(ch); ++i; continue;          // unknown escape: keep literally
+        }
+        if (ch == '"') { out.swap(r); return true; }
+        r.push_back(ch);
+        ++i;
+    }
+    return false;  // unterminated string
 }
 inline bool json_get_int(const std::string& s, const std::string& key, long long& out) {
     std::size_t i = detail::value_pos(s, key);
@@ -126,6 +164,7 @@ inline MsgKind kind_of(const std::string& line) {
     if (t == "nop")       return MsgKind::Nop;
     if (t == "bye")       return MsgKind::Bye;
     if (t == "heartbeat") return MsgKind::Heartbeat;
+    if (t == "depth")     return MsgKind::Depth;
     return MsgKind::Unknown;
 }
 
@@ -133,19 +172,20 @@ inline MsgKind kind_of(const std::string& line) {
 
 inline std::string encode_hello(const std::string& client, std::uint64_t account) {
     return "{\"t\":\"hello\",\"v\":" + std::to_string(kProtocolVersion) +
-           ",\"client\":\"" + client + "\",\"account\":" + std::to_string(account) + "}\n";
+           ",\"client\":\"" + detail::esc(client) + "\",\"account\":" +
+           std::to_string(account) + "}\n";
 }
 inline std::string encode_hello_reply(const std::string& server, bool ok) {
     return "{\"t\":\"hello\",\"v\":" + std::to_string(kProtocolVersion) +
-           ",\"server\":\"" + server + "\",\"ok\":" + (ok ? "true" : "false") + "}\n";
+           ",\"server\":\"" + detail::esc(server) + "\",\"ok\":" + (ok ? "true" : "false") + "}\n";
 }
 inline std::string encode_subscribe(const std::string& symbol) {
     return "{\"t\":\"subscribe\",\"v\":" + std::to_string(kProtocolVersion) +
-           ",\"symbol\":\"" + symbol + "\"}\n";
+           ",\"symbol\":\"" + detail::esc(symbol) + "\"}\n";
 }
 inline std::string encode(const Tick& t) {
     return "{\"t\":\"tick\",\"v\":" + std::to_string(kProtocolVersion) +
-           ",\"symbol\":\"" + t.symbol + "\"" +
+           ",\"symbol\":\"" + detail::esc(t.symbol) + "\"" +
            ",\"time\":" + std::to_string(t.time) +
            ",\"bid\":" + detail::fmt_double(t.bid) +
            ",\"ask\":" + detail::fmt_double(t.ask) +
@@ -156,23 +196,44 @@ inline std::string encode(const Order& o) {
     const char side = (o.side == Side::Buy) ? 'B' : 'S';
     return "{\"t\":\"order\",\"v\":" + std::to_string(kProtocolVersion) +
            ",\"id\":" + std::to_string(o.id) +
-           ",\"symbol\":\"" + o.symbol + "\"" +
+           ",\"symbol\":\"" + detail::esc(o.symbol) + "\"" +
            ",\"side\":\"" + std::string(1, side) + "\"" +
            ",\"volume\":" + detail::fmt_double(o.volume) +
            ",\"price\":" + detail::fmt_double(o.price) +
-           ",\"kind\":\"" + o.kind + "\"}\n";
+           ",\"kind\":\"" + detail::esc(o.kind) + "\"}\n";
 }
 inline std::string encode(const Ack& a) {
     return "{\"t\":\"ack\",\"v\":" + std::to_string(kProtocolVersion) +
            ",\"id\":" + std::to_string(a.id) +
            ",\"ok\":" + (a.ok ? "true" : "false") +
            ",\"retcode\":" + std::to_string(a.retcode) +
-           ",\"message\":\"" + a.message + "\"}\n";
+           ",\"message\":\"" + detail::esc(a.message) + "\"}\n";
 }
 inline std::string encode_nop()       { return "{\"t\":\"nop\",\"v\":1}\n"; }
 inline std::string encode_bye()       { return "{\"t\":\"bye\",\"v\":1}\n"; }
 inline std::string encode_heartbeat(std::uint64_t time) {
     return "{\"t\":\"heartbeat\",\"v\":1,\"time\":" + std::to_string(time) + "}\n";
+}
+
+/// A depth snapshot published by the engine: top-N reconstructed book levels for
+/// a symbol, each a `[price_ticks, qty]` pair (bids best-first, asks best-first).
+/// This is how the ITCH-reconstructed book streams out to MetaTrader / clients.
+inline std::string encode_depth(const std::string& symbol,
+                                const std::vector<std::pair<Price, Qty>>& bids,
+                                const std::vector<std::pair<Price, Qty>>& asks) {
+    std::string s = "{\"t\":\"depth\",\"v\":" + std::to_string(kProtocolVersion) +
+                    ",\"symbol\":\"" + detail::esc(symbol) + "\",\"bids\":[";
+    for (std::size_t i = 0; i < bids.size(); ++i) {
+        if (i) s.push_back(',');
+        s += "[" + std::to_string(bids[i].first) + "," + std::to_string(bids[i].second) + "]";
+    }
+    s += "],\"asks\":[";
+    for (std::size_t i = 0; i < asks.size(); ++i) {
+        if (i) s.push_back(',');
+        s += "[" + std::to_string(asks[i].first) + "," + std::to_string(asks[i].second) + "]";
+    }
+    s += "]}\n";
+    return s;
 }
 
 // ---- parsers (return false on a missing required field) ---------------------
@@ -207,6 +268,41 @@ inline bool parse_ack(const std::string& line, Ack& out) {
     json_get_bool(line, "ok", out.ok);
     if (json_get_int(line, "retcode", rc)) out.retcode = static_cast<int>(rc);
     json_get_str(line, "message", out.message);
+    return true;
+}
+
+// Parse a "[[price,qty],[price,qty],...]" ladder following `key` into `out`.
+inline bool parse_levels(const std::string& line, const std::string& key,
+                         std::vector<std::pair<Price, Qty>>& out) {
+    std::size_t i = detail::value_pos(line, key);
+    if (i == std::string::npos || i >= line.size() || line[i] != '[') return false;
+    out.clear();
+    ++i;  // step past the outer '['
+    while (i < line.size() && line[i] != ']') {
+        if (line[i] != '[') { ++i; continue; }       // skip separators
+        ++i;                                          // into the pair
+        char*           end = nullptr;
+        const long long p   = std::strtoll(line.c_str() + i, &end, 10);
+        if (end == line.c_str() + i) return false;
+        i = static_cast<std::size_t>(end - line.c_str());
+        while (i < line.size() && (line[i] == ',' || line[i] == ' ')) ++i;
+        char*           end2 = nullptr;
+        const long long q    = std::strtoll(line.c_str() + i, &end2, 10);
+        if (end2 == line.c_str() + i) return false;
+        i = static_cast<std::size_t>(end2 - line.c_str());
+        while (i < line.size() && line[i] != ']') ++i;  // to the pair's ']'
+        if (i < line.size()) ++i;                       // past it
+        out.emplace_back(static_cast<Price>(p), static_cast<Qty>(q));
+    }
+    return true;
+}
+
+inline bool parse_depth(const std::string& line, std::string& symbol,
+                        std::vector<std::pair<Price, Qty>>& bids,
+                        std::vector<std::pair<Price, Qty>>& asks) {
+    if (!json_get_str(line, "symbol", symbol)) return false;
+    parse_levels(line, "bids", bids);
+    parse_levels(line, "asks", asks);
     return true;
 }
 

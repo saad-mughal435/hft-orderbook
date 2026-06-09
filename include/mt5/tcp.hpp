@@ -12,8 +12,10 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -71,7 +73,11 @@ public:
         return true;
     }
 
+    /// Read the next '\n'-delimited line. Returns false on peer-close OR on a recv
+    /// timeout (when `set_recv_timeout` is in effect) — `timed_out()` distinguishes
+    /// the two. A partial line is preserved across a timeout, not handed back.
     bool recv_line(std::string& out) {
+        last_timed_out_ = false;
         for (;;) {
             const std::size_t nl = buf_.find('\n');
             if (nl != std::string::npos) {
@@ -81,16 +87,32 @@ public:
             }
             char          tmp[4096];
             const ssize_t n = ::recv(fd_, tmp, sizeof(tmp), 0);
-            if (n <= 0) {                       // peer closed or error
-                if (!buf_.empty()) {            // hand back a final unterminated line
-                    out.swap(buf_);
-                    buf_.clear();
-                    return !out.empty();
-                }
+            if (n > 0) {
+                buf_.append(tmp, static_cast<std::size_t>(n));
+                continue;
+            }
+            if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                last_timed_out_ = true;         // SO_RCVTIMEO fired: idle, not closed
                 return false;
             }
-            buf_.append(tmp, static_cast<std::size_t>(n));
+            if (!buf_.empty()) {                // peer closed: flush a final partial line
+                out.swap(buf_);
+                buf_.clear();
+                return !out.empty();
+            }
+            return false;                       // EOF / error
         }
+    }
+
+    bool timed_out() const { return last_timed_out_; }
+
+    /// Bound how long `recv_line` blocks waiting for data (0 disables). Lets the
+    /// bridge detect a silent/dead peer and reclaim the session.
+    void set_recv_timeout(int ms) {
+        timeval tv;
+        tv.tv_sec  = ms / 1000;
+        tv.tv_usec = (ms % 1000) * 1000;
+        ::setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     }
 
     bool valid() const { return fd_ >= 0; }
@@ -107,7 +129,8 @@ private:
         }
     }
 
-    int         fd_ = -1;
+    int         fd_             = -1;
+    bool        last_timed_out_ = false;
     std::string buf_;
 };
 

@@ -138,25 +138,40 @@ string ExecuteOrder(const string line)
   }
 
 //+------------------------------------------------------------------+
-int OnInit()
+//| (Re)connect to mt5d and re-announce hello + subscribe            |
+//+------------------------------------------------------------------+
+bool Connect()
   {
+   if(g_sock != INVALID_HANDLE)
+      SocketClose(g_sock);
+   g_rxbuf = "";
    g_sock = SocketCreate();
    if(g_sock == INVALID_HANDLE)
      {
       Print("SocketCreate failed: ", GetLastError());
-      return(INIT_FAILED);
+      return(false);
      }
    if(!SocketConnect(g_sock, InpHost, InpPort, 3000))
      {
       Print("SocketConnect to ", InpHost, ":", InpPort, " failed: ", GetLastError());
-      return(INIT_FAILED);
+      SocketClose(g_sock);
+      g_sock = INVALID_HANDLE;
+      return(false);
      }
    SendLine("{\"t\":\"hello\",\"v\":1,\"client\":\"ITCHBridge.mq5\",\"account\":"
             + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)) + "}\n");
    SendLine("{\"t\":\"subscribe\",\"v\":1,\"symbol\":\"" + _Symbol + "\"}\n");
-   EventSetTimer(1);
    Print("ITCHBridge connected to ", InpHost, ":", InpPort);
-   return(INIT_SUCCEEDED);
+   return(true);
+  }
+
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+   EventSetTimer(1);
+   if(!Connect())
+      Print("ITCHBridge: initial connect failed; will retry on timer");
+   return(INIT_SUCCEEDED);   // keep the EA alive so OnTimer can reconnect
   }
 
 //+------------------------------------------------------------------+
@@ -176,8 +191,8 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
-   if(g_sock == INVALID_HANDLE)
-      return;
+   if(g_sock == INVALID_HANDLE || !SocketIsConnected(g_sock))
+      return;   // OnTimer owns (re)connection
    MqlTick t;
    if(!SymbolInfoTick(_Symbol, t))
       return;
@@ -198,8 +213,12 @@ void OnTick()
 //+------------------------------------------------------------------+
 void OnTimer()
   {
-   if(g_sock == INVALID_HANDLE)
-      return;
+   // Reconnect if the link dropped (server restart, network blip, idle timeout).
+   if(g_sock == INVALID_HANDLE || !SocketIsConnected(g_sock))
+     {
+      if(!Connect())
+         return;   // retry on the next timer tick
+     }
    datetime now = TimeCurrent();
    if(now - g_last_hb >= (datetime)InpHeartbeatSecs)
      {

@@ -43,7 +43,9 @@ int main(int argc, char** argv) {
             std::cout << "client connected\n";
 
             ExampleStrategy strat;
-            const BridgeStats st = run_bridge(conn, strat);
+            // Reclaim the session if the EA goes silent for ~60s (12 x 5s), so a
+            // dead terminal can't pin the server. A heartbeating EA stays connected.
+            const BridgeStats st = run_bridge(conn, strat, /*idle_ms=*/5000, /*max_idle=*/12);
 
             std::cout << "session ended: ticks=" << st.ticks
                       << " orders=" << st.orders

@@ -2,6 +2,8 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "core/types.hpp"
 #include "mt5/protocol.hpp"
@@ -99,4 +101,61 @@ TEST_CASE("malformed or wrong-type lines are rejected, not misread", "[mt5][code
 
     Order o;
     CHECK_FALSE(parse_order("{\"t\":\"order\",\"v\":1,\"symbol\":\"X\"}", o));  // no id/side
+}
+
+TEST_CASE("string fields with quotes/backslashes round-trip via escaping", "[mt5][codec]") {
+    Ack in;
+    in.id      = 9;
+    in.ok      = false;
+    in.retcode = 10006;
+    in.message = "rejected: \"bad\" \\ value";  // embedded quote and backslash
+
+    const std::string line = encode(in);
+    Ack out;
+    REQUIRE(parse_ack(line, out));
+    CHECK(out.message == "rejected: \"bad\" \\ value");
+    CHECK(out.id == 9u);
+    CHECK(out.retcode == 10006);
+}
+
+TEST_CASE("a key name inside a string value is not mistaken for the field", "[mt5][codec]") {
+    Order in;
+    in.id     = 5;
+    in.side   = Side::Buy;
+    in.volume = 0.1;
+    in.kind   = "market";
+    in.symbol = "X,\"id\":999,Y";   // adversarial: looks like an id field, but escaped
+
+    const std::string line = encode(in);
+    Order out;
+    REQUIRE(parse_order(line, out));
+    CHECK(out.id == 5u);             // the real key wins, not the one inside the value
+    CHECK(out.symbol == "X,\"id\":999,Y");
+}
+
+TEST_CASE("depth snapshot round-trips its ladders", "[mt5][codec]") {
+    const std::vector<std::pair<Price, Qty>> bids = {{1000000, 100}, {999900, 200}, {999800, 300}};
+    const std::vector<std::pair<Price, Qty>> asks = {{1000100, 150}, {1000200, 250}};
+
+    const std::string line = encode_depth("AAPL", bids, asks);
+    CHECK(kind_of(line) == MsgKind::Depth);
+
+    std::string                        sym;
+    std::vector<std::pair<Price, Qty>> b, a;
+    REQUIRE(parse_depth(line, sym, b, a));
+    CHECK(sym == "AAPL");
+    CHECK(b == bids);
+    CHECK(a == asks);
+}
+
+TEST_CASE("empty depth ladders round-trip", "[mt5][codec]") {
+    const std::vector<std::pair<Price, Qty>> empty;
+    const std::string line = encode_depth("X", empty, empty);
+
+    std::string                        sym;
+    std::vector<std::pair<Price, Qty>> b, a;
+    REQUIRE(parse_depth(line, sym, b, a));
+    CHECK(sym == "X");
+    CHECK(b.empty());
+    CHECK(a.empty());
 }
