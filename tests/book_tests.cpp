@@ -1,5 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstring>
+
+#include "book/book_set.hpp"
 #include "book/order_book.hpp"
 #include "itch/messages.hpp"
 
@@ -118,4 +121,81 @@ TEST_CASE("apply() routes ITCH messages to book operations", "[book]") {
     del.order_ref = 1;
     b.apply(del);
     CHECK(b.order_count() == 0);
+}
+
+TEST_CASE("depth returns the top-n levels, best first, clamped to the side", "[book]") {
+    OrderBook b;
+    b.add(1, Side::Buy, 1000000, 100);
+    b.add(2, Side::Buy, 999900, 200);
+    b.add(3, Side::Buy, 999800, 300);
+    b.add(4, Side::Sell, 1000100, 150);
+    b.add(5, Side::Sell, 1000200, 250);
+
+    const auto bids = b.depth(Side::Buy, 2);
+    REQUIRE(bids.size() == 2);
+    CHECK(bids[0].first == 1000000);  CHECK(bids[0].second == 100u);  // best bid first
+    CHECK(bids[1].first == 999900);   CHECK(bids[1].second == 200u);
+
+    const auto asks = b.asks(10);     // ask for more than exist -> clamped
+    REQUIRE(asks.size() == 2);
+    CHECK(asks[0].first == 1000100);  // best ask first (ascending)
+    CHECK(asks[1].first == 1000200);
+}
+
+TEST_CASE("BookSet routes by stock_locate and names books from StockDirectory",
+          "[book][bookset]") {
+    BookSet bs;
+
+    itch::Message r1{};
+    r1.type = itch::MsgType::StockDirectory;
+    r1.stock_locate = 1;
+    std::memcpy(r1.stock, "AAPL    ", 8);
+    bs.apply(r1);
+    itch::Message r2{};
+    r2.type = itch::MsgType::StockDirectory;
+    r2.stock_locate = 2;
+    std::memcpy(r2.stock, "MSFT    ", 8);
+    bs.apply(r2);
+
+    auto add = [&](std::uint16_t loc, std::uint64_t ref, Side s, Price p, Qty q) {
+        itch::Message m{};
+        m.type = itch::MsgType::AddOrder;
+        m.stock_locate = loc;
+        m.order_ref = ref;
+        m.side = s;
+        m.price = p;
+        m.shares = q;
+        bs.apply(m);
+    };
+    add(1, 10, Side::Buy, 1500000, 100);   // AAPL
+    add(1, 11, Side::Sell, 1500100, 50);   // AAPL
+    add(2, 20, Side::Buy, 3000000, 200);   // MSFT
+
+    CHECK(bs.book_count() == 2);
+    CHECK(bs.symbol(1) == "AAPL");          // trailing spaces trimmed
+    CHECK(bs.symbol(2) == "MSFT");
+    CHECK(bs.total_orders() == 3);
+
+    const OrderBook* aapl = bs.book("AAPL");
+    REQUIRE(aapl != nullptr);
+    CHECK(aapl->order_count() == 2);
+    Price px = 0;
+    Qty   qy = 0;
+    REQUIRE(aapl->best_bid(px, qy));
+    CHECK(px == 1500000);
+    CHECK(qy == 100u);
+
+    const OrderBook* msft = bs.book(2);
+    REQUIRE(msft != nullptr);
+    CHECK(msft->order_count() == 1);
+
+    // An execute on AAPL's order routes to AAPL only; MSFT is untouched.
+    itch::Message e{};
+    e.type = itch::MsgType::OrderExecuted;
+    e.stock_locate = 1;
+    e.order_ref = 10;
+    e.shares = 40;
+    bs.apply(e);
+    CHECK(aapl->qty_at(Side::Buy, 1500000) == 60u);
+    CHECK(msft->order_count() == 1);
 }

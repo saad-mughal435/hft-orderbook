@@ -4,6 +4,8 @@
 #include <functional>
 #include <map>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "core/types.hpp"
 #include "itch/messages.hpp"
@@ -116,6 +118,28 @@ public:
     std::size_t order_count() const { return orders_.size(); }
     std::size_t bid_levels()  const { return bids_.size(); }
     std::size_t ask_levels()  const { return asks_.size(); }
+
+    /// Top-`n` price levels on a side, best first (bids descending, asks
+    /// ascending) — the inside of the book outward. Returns fewer than `n` if the
+    /// side is thinner. The maps are already ordered, so this is a simple walk.
+    std::vector<std::pair<Price, Qty>> depth(Side side, std::size_t n) const {
+        std::vector<std::pair<Price, Qty>> out;
+        out.reserve(n);
+        if (side == Side::Buy) {
+            for (const auto& kv : bids_) {
+                if (out.size() >= n) break;
+                out.emplace_back(kv.first, kv.second);
+            }
+        } else {
+            for (const auto& kv : asks_) {
+                if (out.size() >= n) break;
+                out.emplace_back(kv.first, kv.second);
+            }
+        }
+        return out;
+    }
+    std::vector<std::pair<Price, Qty>> bids(std::size_t n) const { return depth(Side::Buy, n); }
+    std::vector<std::pair<Price, Qty>> asks(std::size_t n) const { return depth(Side::Sell, n); }
 
 private:
     void decrement_level(Side side, Price price, Qty d) {

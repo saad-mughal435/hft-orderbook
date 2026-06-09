@@ -1,12 +1,16 @@
 // obreplay — replay a NASDAQ ITCH 5.0 capture (or a synthetic stream) through the
-// full decode -> book pipeline and report throughput + a latency distribution.
+// full decode -> multi-symbol book pipeline and report throughput, per-symbol
+// top-of-book + depth, and a latency distribution.
 //
-//   obreplay <capture.itch | capture.gz>   replay a captured ITCH 5.0 file
-//   obreplay --synthetic <N>               replay N deterministically generated msgs
+//   obreplay <capture.itch | capture.gz> [--symbol SYM]
+//   obreplay --synthetic <N>             [--symbol SYM]
 //
 // Real full-day NASDAQ samples (≈3.5–5.6 GB) live at emi.nasdaq.com and are NOT
 // committed; `gencap` produces a small reproducible capture, or use --synthetic.
+// Captures are BinaryFILE-framed (2-byte big-endian length per message). A real
+// day interleaves thousands of symbols, routed by stock_locate into a BookSet.
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -15,12 +19,14 @@
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "book/book_set.hpp"
 #include "book/order_book.hpp"
 #include "core/latency_hist.hpp"
 #include "core/types.hpp"
-#include "feed/pipeline.hpp"
+#include "feed/framing.hpp"
 #include "feed/synthetic.hpp"
 #include "itch/decoder.hpp"
 #include "itch/messages.hpp"
@@ -64,8 +70,30 @@ bool load_file(const std::string& path, std::vector<std::uint8_t>& out) {
 
 void usage() {
     std::cerr << "usage:\n"
-              << "  obreplay <capture.itch | capture.gz>   replay an ITCH 5.0 capture\n"
-              << "  obreplay --synthetic <N>               replay N generated messages\n";
+              << "  obreplay <capture.itch | capture.gz> [--symbol SYM]\n"
+              << "  obreplay --synthetic <N>             [--symbol SYM]\n";
+}
+
+std::string label(const BookSet& bs, std::uint16_t locate) {
+    const std::string s = bs.symbol(locate);
+    return s.empty() ? ("locate " + std::to_string(locate)) : s;
+}
+
+void print_top(const BookSet& bs, std::uint16_t locate) {
+    const OrderBook* ob = bs.book(locate);
+    if (!ob) return;
+    Price bp = 0, ap = 0;
+    Qty   bq = 0, aq = 0;
+    const bool hb = ob->best_bid(bp, bq);
+    const bool ha = ob->best_ask(ap, aq);
+    std::cout << "  [" << label(bs, locate) << "]  ";
+    if (hb) std::cout << "bid " << to_dollars(bp) << " x " << bq;
+    else    std::cout << "bid (empty)";
+    std::cout << "  |  ";
+    if (ha) std::cout << "ask " << to_dollars(ap) << " x " << aq;
+    else    std::cout << "ask (empty)";
+    std::cout << "   (" << ob->order_count() << " orders, " << ob->bid_levels()
+              << " bid / " << ob->ask_levels() << " ask levels)\n";
 }
 
 }  // namespace
@@ -73,15 +101,30 @@ void usage() {
 int main(int argc, char** argv) {
     std::vector<std::uint8_t> data;
     std::string               source;
+    std::string               focus;     // --symbol filter
+    long                      synth = 0;
+    std::string               file;
 
-    if (argc == 3 && std::string(argv[1]) == "--synthetic") {
-        const long n = std::strtol(argv[2], nullptr, 10);
-        if (n <= 0) { usage(); return 2; }
-        data   = make_synthetic_itch(static_cast<std::size_t>(n));
-        source = std::string("synthetic(") + argv[2] + ")";
-    } else if (argc == 2 && argv[1][0] != '-') {
-        if (!load_file(argv[1], data)) return 1;
-        source = argv[1];
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--symbol" && i + 1 < argc) {
+            focus = argv[++i];
+        } else if (a == "--synthetic" && i + 1 < argc) {
+            synth = std::strtol(argv[++i], nullptr, 10);
+        } else if (!a.empty() && a[0] != '-') {
+            file = a;
+        } else {
+            usage();
+            return 2;
+        }
+    }
+
+    if (synth > 0) {
+        data   = make_synthetic_itch(static_cast<std::size_t>(synth));
+        source = "synthetic(" + std::to_string(synth) + ")";
+    } else if (!file.empty()) {
+        if (!load_file(file, data)) return 1;
+        source = file;
     } else {
         usage();
         return 2;
@@ -89,20 +132,22 @@ int main(int argc, char** argv) {
 
     if (data.empty()) { std::cerr << "error: empty input\n"; return 1; }
 
-    // Pass 1: timed end-to-end throughput — one clock pair, so no per-message
-    // timer overhead pollutes the headline number.
-    OrderBook  book;
+    // Pass 1: timed end-to-end throughput — one clock pair, no per-message timer
+    // overhead in the headline number. Routed multi-symbol through a BookSet.
+    BookSet    book;
+    std::size_t n = 0;
     const auto t0 = Clock::now();
-    const std::size_t n = replay_single_threaded(data.data(), data.size(), book);
+    for_each_framed_message(data.data(), data.size(),
+                            [&](const itch::Message& m) { book.apply(m); ++n; });
     const auto t1 = Clock::now();
     const double ns = std::chrono::duration<double, std::nano>(t1 - t0).count();
 
-    // Pass 2: per-message decode+apply latency, for the tail shape. The two
-    // clock reads per message add overhead (documented), but the distribution's
-    // *shape* is still informative.
+    // Pass 2: per-message decode+apply latency, for the tail shape. The two clock
+    // reads per message add overhead (documented), but the distribution's *shape*
+    // is still informative.
     LatencyHist hist;
     {
-        OrderBook   b2;
+        BookSet     b2;
         std::size_t off = 0;
         while (off + 2 <= data.size()) {
             const std::size_t mlen = (static_cast<std::size_t>(data[off]) << 8) |
@@ -118,11 +163,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    Price      bid = 0, ask = 0;
-    Qty        bq = 0, aq = 0;
-    const bool hb = book.best_bid(bid, bq);
-    const bool ha = book.best_ask(ask, aq);
-
     std::cout << "obreplay  source=" << source << "\n"
               << "  bytes        " << data.size() << "\n"
               << "  messages     " << n << "\n"
@@ -131,13 +171,52 @@ int main(int argc, char** argv) {
               << "  per message  " << (ns / static_cast<double>(n ? n : 1))
               << " ns (amortized)\n\n";
 
-    std::cout << "final book:\n";
-    if (hb) std::cout << "  best bid       " << to_dollars(bid) << " x " << bq << "\n";
-    else    std::cout << "  best bid       (empty)\n";
-    if (ha) std::cout << "  best ask       " << to_dollars(ask) << " x " << aq << "\n";
-    else    std::cout << "  best ask       (empty)\n";
-    std::cout << "  resting orders " << book.order_count() << "  ("
-              << book.bid_levels() << " bid / " << book.ask_levels() << " ask levels)\n\n";
+    std::cout << "books: " << book.book_count() << " symbol(s), "
+              << book.total_orders() << " resting orders\n";
+
+    // Rank symbols by resting-order count and show the busiest.
+    std::vector<std::pair<std::uint16_t, std::size_t>> ranked;
+    for (const auto& kv : book.books())
+        ranked.emplace_back(kv.first, kv.second.order_count());
+    std::sort(ranked.begin(), ranked.end(),
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+
+    const std::size_t show = std::min<std::size_t>(ranked.size(), 10);
+    if (show) std::cout << "\ntop symbols by resting orders:\n";
+    for (std::size_t i = 0; i < show; ++i) print_top(book, ranked[i].first);
+
+    // Pick a focal book: --symbol if given (by ticker or locate), else the busiest.
+    std::uint16_t focus_locate = 0;
+    bool          have_focus   = false;
+    if (!focus.empty()) {
+        for (const auto& kv : book.books())
+            if (book.symbol(kv.first) == focus) { focus_locate = kv.first; have_focus = true; break; }
+        if (!have_focus) {
+            char*      end = nullptr;
+            const long L   = std::strtol(focus.c_str(), &end, 10);
+            if (end != focus.c_str() && book.book(static_cast<std::uint16_t>(L))) {
+                focus_locate = static_cast<std::uint16_t>(L);
+                have_focus   = true;
+            }
+        }
+        if (!have_focus)
+            std::cout << "\n(symbol \"" << focus << "\" not found; showing the busiest)\n";
+    }
+    if (!have_focus && !ranked.empty()) { focus_locate = ranked.front().first; have_focus = true; }
+
+    if (have_focus) {
+        const OrderBook* ob = book.book(focus_locate);
+        std::cout << "\ndepth (best 5) for " << label(book, focus_locate) << ":\n  bids:";
+        const auto bids = ob->bids(5);
+        for (const auto& l : bids) std::cout << "  " << to_dollars(l.first) << "x" << l.second;
+        if (bids.empty()) std::cout << "  (empty)";
+        std::cout << "\n  asks:";
+        const auto asks = ob->asks(5);
+        for (const auto& l : asks) std::cout << "  " << to_dollars(l.first) << "x" << l.second;
+        if (asks.empty()) std::cout << "  (empty)";
+        std::cout << "\n";
+    }
+    std::cout << "\n";
 
     hist.print(std::cout,
                "per-message decode+apply latency [includes timer overhead; see README]");
