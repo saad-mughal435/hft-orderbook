@@ -34,11 +34,29 @@ ack. Defined once in [`include/mt5/protocol.hpp`](../include/mt5/protocol.hpp).
 | engine → EA    | `order`     | `id`, `symbol`, `side` (`B`/`S`), `volume`, `price` (`0`=market), `kind` |
 | EA → engine    | `ack`       | `id`, `ok`, `retcode` (MT5 `MqlTradeResult.retcode`), `message` |
 | engine → EA    | `nop`       | — (a tick that produced no order) |
+| engine → EA    | `depth`     | `symbol`, `bids` / `asks` as `[[price, qty], …]` ladders |
 | EA → engine    | `bye` / `heartbeat` | session control |
 
 The session is strictly request/response: the EA sends a tick and reads exactly
 one reply (`order` or `nop`); if it was an order it sends an `ack`. That keeps both
 sides single-threaded and race-free with no locking.
+
+String values are escaped (`\"`, `\\`) and keys are matched only at real
+object-key positions, so a key name appearing inside a value is never mis-parsed.
+
+### Depth publishing — closing the loop
+
+`publish_depth(sock, symbol, book, n)` serialises the top-`n` levels of an engine
+order book as a `depth` message, so the book the engine **reconstructs from ITCH**
+can stream straight out to the MetaTrader side (or any subscriber). Prices are the
+engine's integer ticks; `parse_depth` rebuilds the ladders.
+
+### Resilience
+
+The server sets a recv timeout (`SO_RCVTIMEO`) and reclaims a session after a few
+idle intervals, so a dead terminal can't pin it — a heartbeating EA stays
+connected. `ITCHBridge.mq5` reconnects (re-sending `hello` + `subscribe`) from its
+`OnTimer` if the link drops.
 
 ## Run the server
 

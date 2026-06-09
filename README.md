@@ -21,12 +21,13 @@ design both simpler and faster than a generic matching engine.
 
 | Module | Responsibility |
 | ------ | -------------- |
-| `core/`  | integer prices, object pool, `alignas(64)` lock-free SPSC ring |
-| `itch/`  | ITCH 5.0 message decode (manual big-endian) + BinaryFILE deframer |
-| `book/`  | order-book reconstructor — `order_ref → order` map, tick-indexed levels |
-| `mt5/`   | NDJSON bridge protocol + TCP server + mock client; `ITCHBridge.mq5` EA |
+| `core/`  | integer prices, `ObjectPool`, pluggable level stores (`MapLevels` / `FlatLevels`), `alignas(64)` lock-free SPSC ring, latency histogram |
+| `itch/`  | ITCH 5.0 message decode (manual big-endian) |
+| `feed/`  | BinaryFILE deframer, two-stage decode→book pipeline, deterministic synthetic-capture generator |
+| `book/`  | order-book reconstructor (pooled `order_ref → order`) + multi-symbol `BookSet` routed by `stock_locate` |
+| `mt5/`   | NDJSON bridge protocol (ticks / orders / acks + **depth publish**) + TCP server + mock client; `ITCHBridge.mq5` EA |
 | `bench/` | Google Benchmark microbenchmarks (decode / book / SPSC) |
-| `apps/`  | `obreplay` (replay an ITCH `.gz`), `mt5d` (MT5 bridge server) |
+| `apps/`  | `obreplay` (replay a capture, multi-symbol), `gencap` (write a capture), `mt5d` (MT5 bridge server) |
 
 The ITCH decoder extracts every field by **explicit big-endian byte assembly** — never by
 casting a packed struct over the wire (the layouts are big-endian with misaligned multi-byte
@@ -52,17 +53,54 @@ committed; instead the repo ships a deterministic synthetic-capture generator (`
 Both the real files and the synthetic generator use the **BinaryFILE** layout — every message is
 preceded by a 2-byte big-endian length — which the engine deframes (`feed/framing.hpp`).
 
+A real NASDAQ day interleaves thousands of symbols in one stream; `obreplay` routes them by
+`stock_locate` into a per-symbol `BookSet`, names the books from the StockDirectory (`R`)
+messages, and prints the busiest symbols' top-of-book plus a depth ladder.
+
 ```bash
-./build/obreplay --synthetic 1000000      # replay 1M generated messages
-./build/gencap 50000 sample.itch          # write a small reproducible capture
-./build/obreplay sample.itch              # replay it: throughput + latency histogram
+./build/obreplay --synthetic 1000000         # replay 1M generated messages
+./build/gencap 50000 sample.itch             # write a small reproducible capture
+./build/obreplay sample.itch                 # replay it: throughput + latency histogram
 ./build/obreplay 01302020.NASDAQ_ITCH50.gz   # ...or a real NASDAQ day (zlib build)
+./build/obreplay 01302020.NASDAQ_ITCH50.gz --symbol AAPL   # focus one ticker's depth
 ```
 
-> **A note on latency numbers:** correctness and that the benchmarks build/run are verified in
-> CI, but GitHub's shared runners are not representative of trading hardware. Headline
-> p50/p99/p999 nanosecond figures require pinning threads on bare metal — the methodology is
-> documented; run it on a real box for real numbers (no fabricated figures here).
+## Performance
+
+Microbenchmarks ([Google Benchmark](https://github.com/google/benchmark), `-DHFTOB_BUILD_BENCH=ON`)
+cover the decode and the per-op book mutation. The book is templated over its price-level store, so
+two implementations are compared head to head on the same workload — `MapLevels` (a `std::map`
+red-black tree) and `FlatLevels` (a cache-friendly sorted vector):
+
+| benchmark (GitHub CI runner — **relative only**) | result |
+| --- | --- |
+| decode one ITCH message | ~5 ns |
+| SPSC ring push + pop | ~3 ns |
+| build a 10k-order book — `MapLevels` (std::map) | ~90 ns/msg (≈11 M msg/s) |
+| build a 10k-order book — `FlatLevels` (sorted vector) | ~120 ns/msg (≈8 M msg/s) |
+
+On this synthetic feed the `std::map` baseline is **~25–30% faster** than the flat-vector levels: the
+mid random-walks across ~100 price levels, so the flat vector pays an O(n) tail-shift on inserts and
+erases in the *middle* of the book, while the tree updates scattered levels in O(log n). Flat levels
+win the opposite workload — activity tightly clustered at the inside (a few levels, top-of-book
+churn), where front/back edits shift little. The engine ships **both**, parity-tested, so the
+trade-off is *measured*, not assumed.
+
+> These are **relative, same-runner** figures on virtualized CI hardware — fair for an A/B, not HFT
+> numbers. Absolute p50/p99/p999 require pinning threads on bare metal; the method is documented —
+> run it on a real box. No fabricated figures here.
+
+## Quality
+
+Every push runs, in GitHub Actions:
+
+- **build + test** (`ctest`, gcc) — unit, property/invariant, multi-symbol replay, and the MT5
+  loopback bridge integration test
+- **ThreadSanitizer** over the SPSC / pipeline / bridge threads — the proof the lock-free ring is race-free
+- **AddressSanitizer + UndefinedBehaviorSanitizer** over the suite and a replay run
+- **clang `-Wall -Wextra -Wpedantic -Werror`** build of the library and tools
+- **libFuzzer** feeding arbitrary bytes through the deframer + decoder + book (ASan-checked)
+- **benchmark smoke** so the benches keep building and running
 
 ## License
 
