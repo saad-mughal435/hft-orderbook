@@ -34,8 +34,14 @@ jobs:
           ./build/gencap 20000 /tmp/synth.itch
           ./build/obreplay /tmp/synth.itch
 
-      - name: WebSocket snapshot dump smoke
-        run: ./build/wsbook --dump 40 --synthetic 8000 | head -3
+      - name: Record book replay (real engine output, for the static viewer)
+        run: ./build/wsbook --dump 72 --synthetic 7200 > book-replay.ndjson
+
+      - name: Upload replay artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-replay
+          path: book-replay.ndjson
 
   benchmarks:
     name: benchmarks (smoke)
