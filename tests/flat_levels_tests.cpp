@@ -41,36 +41,47 @@ TEST_CASE("FlatLevels keeps bids highest-first and asks lowest-first", "[levels]
     CHECK(top[1].first == 1000100);
 }
 
-TEST_CASE("FlatOrderBook reconstructs identically to the std::map OrderBook",
-          "[book][flat][parity]") {
+TEST_CASE("flat and windowed books reconstruct identically to the std::map book",
+          "[book][flat][windowed][parity]") {
     const std::vector<std::uint8_t> data = make_synthetic_itch(20000, 4242);
 
-    OrderBook     a;
-    FlatOrderBook b;
-    for_each_framed_message(data.data(), data.size(),
-                            [&](const itch::Message& m) { a.apply(m); });
-    for_each_framed_message(data.data(), data.size(),
-                            [&](const itch::Message& m) { b.apply(m); });
+    OrderBook         a;   // std::map levels (reference)
+    FlatOrderBook     b;   // sorted-vector levels
+    WindowedOrderBook c;   // price-tick-indexed windowed levels
+    for_each_framed_message(data.data(), data.size(), [&](const itch::Message& m) { a.apply(m); });
+    for_each_framed_message(data.data(), data.size(), [&](const itch::Message& m) { b.apply(m); });
+    for_each_framed_message(data.data(), data.size(), [&](const itch::Message& m) { c.apply(m); });
 
     CHECK(a.invariant_ok());
     CHECK(b.invariant_ok());
+    CHECK(c.invariant_ok());
     CHECK(a.order_count() == b.order_count());
+    CHECK(a.order_count() == c.order_count());
     CHECK(a.bid_levels() == b.bid_levels());
+    CHECK(a.bid_levels() == c.bid_levels());
     CHECK(a.ask_levels() == b.ask_levels());
+    CHECK(a.ask_levels() == c.ask_levels());
 
-    Price pa = 0, pb = 0;
-    Qty   qa = 0, qb = 0;
+    Price pa = 0, pb = 0, pc = 0;
+    Qty   qa = 0, qb = 0, qc = 0;
     const bool hba = a.best_bid(pa, qa);
-    const bool hbb = b.best_bid(pb, qb);
-    CHECK(hba == hbb);
-    if (hba && hbb) { CHECK(pa == pb); CHECK(qa == qb); }
-
+    CHECK(hba == b.best_bid(pb, qb));
+    CHECK(hba == c.best_bid(pc, qc));
+    if (hba) {
+        CHECK(pa == pb);  CHECK(qa == qb);
+        CHECK(pa == pc);  CHECK(qa == qc);
+    }
     const bool haa = a.best_ask(pa, qa);
-    const bool hab = b.best_ask(pb, qb);
-    CHECK(haa == hab);
-    if (haa && hab) { CHECK(pa == pb); CHECK(qa == qb); }
+    CHECK(haa == b.best_ask(pb, qb));
+    CHECK(haa == c.best_ask(pc, qc));
+    if (haa) {
+        CHECK(pa == pb);  CHECK(qa == qb);
+        CHECK(pa == pc);  CHECK(qa == qc);
+    }
 
-    // Full ladders must be element-for-element identical.
+    // Full ladders must be element-for-element identical across all three stores.
     CHECK(a.bids(1000000) == b.bids(1000000));
+    CHECK(a.bids(1000000) == c.bids(1000000));
     CHECK(a.asks(1000000) == b.asks(1000000));
+    CHECK(a.asks(1000000) == c.asks(1000000));
 }

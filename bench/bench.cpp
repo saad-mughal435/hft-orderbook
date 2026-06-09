@@ -85,8 +85,9 @@ static void BM_BookOps(benchmark::State& state) {
     state.SetItemsProcessed(static_cast<std::int64_t>(state.iterations()) *
                             static_cast<std::int64_t>(applied));
 }
-BENCHMARK_TEMPLATE(BM_BookOps, OrderBook)->Arg(10000);      // std::map levels (baseline)
-BENCHMARK_TEMPLATE(BM_BookOps, FlatOrderBook)->Arg(10000);  // flat sorted-vector levels
+BENCHMARK_TEMPLATE(BM_BookOps, OrderBook)->Arg(10000);          // std::map levels (baseline)
+BENCHMARK_TEMPLATE(BM_BookOps, FlatOrderBook)->Arg(10000);      // flat sorted-vector levels
+BENCHMARK_TEMPLATE(BM_BookOps, WindowedOrderBook)->Arg(10000);  // price-tick-indexed array
 
 // SPSC ring push+pop round trip (single-threaded — measures the per-op cost).
 static void BM_SpscPushPop(benchmark::State& state) {

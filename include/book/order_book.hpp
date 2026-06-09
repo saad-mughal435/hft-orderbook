@@ -11,6 +11,7 @@
 #include "core/flat_levels.hpp"
 #include "core/object_pool.hpp"
 #include "core/types.hpp"
+#include "core/windowed_levels.hpp"
 #include "itch/messages.hpp"
 
 namespace hftob {
@@ -163,8 +164,10 @@ private:
 };
 
 /// Default book: std::map levels (readable baseline). `FlatOrderBook` swaps in the
-/// cache-friendly sorted-vector levels for the performance A/B.
-using OrderBook     = BasicOrderBook<MapLevels>;
-using FlatOrderBook = BasicOrderBook<FlatLevels>;
+/// cache-friendly sorted-vector levels and `WindowedOrderBook` the price-tick-indexed
+/// array — the three are benchmarked head to head (`BM_BookOps`).
+using OrderBook         = BasicOrderBook<MapLevels>;
+using FlatOrderBook     = BasicOrderBook<FlatLevels>;
+using WindowedOrderBook = BasicOrderBook<WindowedLevels>;
 
 }  // namespace hftob
