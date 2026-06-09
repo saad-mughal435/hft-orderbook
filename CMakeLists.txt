@@ -90,6 +90,8 @@ if(HFTOB_BUILD_TESTS)
     tests/itch_tests.cpp
     tests/book_tests.cpp
     tests/book_props_tests.cpp
+    tests/object_pool_tests.cpp
+    tests/flat_levels_tests.cpp
     tests/spsc_tests.cpp
     tests/pipeline_tests.cpp
     tests/mt5_codec_tests.cpp
