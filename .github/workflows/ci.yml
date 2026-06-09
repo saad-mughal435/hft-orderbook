@@ -22,3 +22,28 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      - name: Replay smoke (synthetic stream)
+        run: ./build/obreplay --synthetic 50000
+
+      - name: Replay smoke (generated capture file)
+        run: |
+          ./build/gencap 20000 /tmp/synth.itch
+          ./build/obreplay /tmp/synth.itch
+
+  benchmarks:
+    name: benchmarks (smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (benchmarks on, tests off)
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          -DHFTOB_BUILD_BENCH=ON -DHFTOB_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run benchmark smoke (tiny time budget)
+        run: ./build/hftob_bench --benchmark_min_time=0.02s

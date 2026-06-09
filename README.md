@@ -47,8 +47,15 @@ Requires CMake ≥ 3.16 and a C++17 compiler. Tests use
 
 NASDAQ publishes full-day TotalView-ITCH 5.0 samples (≈ 3.5–5.6 GB each, no login) at
 `https://emi.nasdaq.com/ITCH/Nasdaq ITCH/` as `MMDDYYYY.NASDAQ_ITCH50.gz`. Those are **not**
-committed; the repo bundles a tiny synthetic capture for tests and the demo, and `obreplay`
-can be pointed at a real `.gz`.
+committed; instead the repo ships a deterministic synthetic-capture generator (`gencap`) and an
+`obreplay --synthetic N` mode for tests and the demo, and `obreplay` can be pointed at a real `.gz`.
+
+```bash
+./build/obreplay --synthetic 1000000      # replay 1M generated messages
+./build/gencap 50000 sample.itch          # write a small reproducible capture
+./build/obreplay sample.itch              # replay it: throughput + latency histogram
+./build/obreplay 01302020.NASDAQ_ITCH50.gz   # ...or a real NASDAQ day (zlib build)
+```
 
 > **A note on latency numbers:** correctness and that the benchmarks build/run are verified in
 > CI, but GitHub's shared runners are not representative of trading hardware. Headline
