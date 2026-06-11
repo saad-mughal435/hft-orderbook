@@ -1,26 +1,27 @@
 # hft-orderbook
 
-A low-latency **C++17** trading-infrastructure project. It reconstructs live limit-order books from
+A **C++17** trading-infrastructure project. It reconstructs live limit-order books from
 the real **NASDAQ TotalView-ITCH 5.0** feed - over both **BinaryFILE** captures and the **MoldUDP64**
 UDP multicast transport - derives microstructure signals, and speaks **FIX 4.4** order entry plus a
-**MetaTrader 5** bridge. Built the way trading systems are: **lock-free / wait-free**, no hot-path
-allocation, cache-line-disciplined, sharded across cores, and **sanitizer- and fuzz-hardened**.
+**MetaTrader 5** bridge.
 
 [![CI](https://github.com/saad-mughal435/hft-orderbook/actions/workflows/ci.yml/badge.svg)](https://github.com/saad-mughal435/hft-orderbook/actions/workflows/ci.yml)
 
-**What it demonstrates** - for an HFT/low-latency C++ role:
-- **Ultra-low-latency C++** - lock-free/wait-free SPSC ring, `PAUSE` busy-wait, object-pooled and
-  integer-priced hot path, a price-tick-indexed book (`docs/PERFORMANCE.md`).
-- **Market connectivity** - ITCH 5.0 decode (manual big-endian), the **MoldUDP64** UDP feed with
-  sequence-gap detection, and a dependency-free WebSocket publisher.
-- **Order entry** - a **FIX 4.4** codec (NewOrderSingle / ExecutionReport, BodyLength + CheckSum).
-- **Distributed / scale** - symbols **sharded** across worker threads, one SPSC ring per core.
-- **Rigour** - 6 CI jobs: build+test, **ThreadSanitizer**, ASan/UBSan, clang **`-Werror`**, **libFuzzer**,
-  benchmarks.
+What's in here:
 
-> **Status: feature-complete & hardened.** ITCH 5.0 decoder ✅ · order-book reconstructor ✅ · lock-free
-> + sharded pipeline ✅ · benchmarks + replay ✅ · **MoldUDP64 UDP** ✅ · **FIX 4.4** ✅ · MT5 bridge ✅ ·
-> live L2 viewer ✅ - built phase by phase, each verified in CI.
+- **Hot path** - lock-free/wait-free SPSC ring, `PAUSE` busy-wait, object-pooled and
+  integer-priced mutation path, a price-tick-indexed book. No allocation in steady state;
+  the reasoning is in `docs/PERFORMANCE.md`.
+- **Market data in** - ITCH 5.0 decode (manual big-endian), the **MoldUDP64** UDP feed with
+  sequence-gap detection, and a dependency-free WebSocket publisher.
+- **Order entry out** - a **FIX 4.4** codec (NewOrderSingle / ExecutionReport, BodyLength + CheckSum)
+  and an NDJSON-over-TCP MetaTrader 5 bridge.
+- **Scaling** - symbols **sharded** across worker threads, one SPSC ring per core.
+- **Verification** - 6 CI jobs: build+test, **ThreadSanitizer**, ASan/UBSan, clang **`-Werror`**,
+  **libFuzzer**, benchmarks.
+
+There is also replay tooling for real and synthetic captures, and a live L2
+[browser viewer](https://saadm.dev/hft-book/viewer.html) fed by the engine's WebSocket publisher.
 
 ## Why a *reconstructor*, not a matching engine
 
@@ -110,7 +111,7 @@ exposes `rdtsc` + `pin_this_thread` for a pinned bare-metal deployment. See
 
 > These are **relative, same-runner** figures on virtualized CI hardware - fair for an A/B, not HFT
 > numbers. Absolute p50/p99/p999 require pinning threads on bare metal (isolcpus, fixed TSC) - the
-> method is documented; run it on a real box. No fabricated figures here.
+> method is documented; run it on a real box.
 
 ## Analytics & live view
 
