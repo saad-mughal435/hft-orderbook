@@ -81,6 +81,25 @@ cmake -S . -B build && cmake --build build -j
 > `ExampleStrategy` is a trivial mid-move rule for wiring the round trip, not a
 > trading signal - replace `on_tick` with your own logic.
 
+## On-chart terminal (HUD)
+
+`ITCHBridge.mq5` also renders a compact **execution-bridge terminal** on the chart
+(`OBJ_RECTANGLE_LABEL` / `OBJ_LABEL`, no DLLs), so the bridge is observable at a
+glance instead of only in the Experts log:
+
+- **Link status** - `LIVE` / `LINKING` / `OFFLINE` pill + dot, account, host:port, uptime.
+- **Top of book** - live `bid` (green) / `ask` (red), spread in points, mid, last, volume.
+- **Mid trend** - a rolling sparkline of the last ~24 mid prices.
+- **Throughput** - ticks streamed, smoothed tick rate, orders received, acks (filled / rejected).
+- **Last execution** - side, volume, and `MqlTradeResult.retcode` (`DONE` green / `REJECT` red).
+
+The panel draws **only real bridge data** - top-of-book comes straight from
+`MqlTick` and the counters from the live session; it never fabricates an L2 ladder
+the tick bridge doesn't have. Styling follows a dark trading-terminal palette
+(bid `#26A69A` / ask `#EF5350`, monospace numerics for column alignment). Toggle it
+off with the `InpShowPanel` input. It is purely additive - the tick → order → ack
+path is unchanged.
+
 ## How it's verified without Windows
 
 CI can't run MetaEditor, so the EA ships as a source artifact. The C++ side and the
