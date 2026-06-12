@@ -12,7 +12,7 @@ jobs:
     name: build + test (ubuntu, g++)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -44,7 +44,7 @@ jobs:
         run: ./build/wsbook --dump 72 --synthetic 7200 > book-replay.ndjson
 
       - name: Upload replay artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: book-replay
           path: book-replay.ndjson
@@ -53,7 +53,7 @@ jobs:
     name: benchmarks (smoke)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure (benchmarks on, tests off)
         run: >
@@ -78,7 +78,7 @@ jobs:
           - san: address-undefined
             flags: "-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g -O1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure (${{ matrix.san }})
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="${{ matrix.flags }}"
@@ -102,7 +102,7 @@ jobs:
       CC: clang
       CXX: clang++
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure (clang, -Werror, tests/bench off)
         run: >
@@ -120,7 +120,7 @@ jobs:
       CC: clang
       CXX: clang++
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure (fuzz on, clang)
         run: >
