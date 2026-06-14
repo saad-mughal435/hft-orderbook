@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-06-14T08:28:41Z",
+  "environment": "GitHub Actions ubuntu-latest (virtualized; relative figures, not absolute)",
+  "method": "steady_clock per message; times decode + book.apply only (no IO/setup); deterministic synthetic ITCH 5.0, seed=1",
+  "sample_messages": 192095,
+  "per_type": [
+    { "type": "Add Order", "code": "A", "count": 99889, "p50_ns": 100, "p95_ns": 120, "p99_ns": 160, "max_ns": 117029 },
+    { "type": "Order Executed", "code": "E", "count": 32003, "p50_ns": 140, "p95_ns": 190, "p99_ns": 240, "max_ns": 15780 },
+    { "type": "Order Cancel", "code": "X", "count": 23979, "p50_ns": 140, "p95_ns": 190, "p99_ns": 231, "max_ns": 12263 },
+    { "type": "Order Delete", "code": "D", "count": 20099, "p50_ns": 160, "p95_ns": 201, "p99_ns": 260, "max_ns": 702 },
+    { "type": "Order Replace", "code": "U", "count": 16125, "p50_ns": 211, "p95_ns": 270, "p99_ns": 320, "max_ns": 20939 }
+  ],
+  "overall": { "count": 192095, "p50_ns": 110, "p95_ns": 211, "p99_ns": 260, "max_ns": 117029 }
+}
