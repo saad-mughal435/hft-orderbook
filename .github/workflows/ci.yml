@@ -66,6 +66,19 @@ jobs:
       - name: Run benchmark smoke (tiny time budget)
         run: ./build/hftob_bench --benchmark_min_time=0.02s
 
+      - name: Per-message-type decode-to-book latency histogram (JSON)
+        run: |
+          # Stamp the real CI run time (UTC, ISO-8601) into the document.
+          export HFTOB_GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          ./build/latency_json 200000 latency.json
+          cat latency.json
+
+      - name: Upload latency histogram artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: latency-histogram
+          path: latency.json
+
   sanitizers:
     name: sanitizers (${{ matrix.san }})
     runs-on: ubuntu-latest

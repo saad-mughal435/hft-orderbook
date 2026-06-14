@@ -74,6 +74,11 @@ if(HFTOB_BUILD_BENCH)
 
   add_executable(hftob_bench bench/bench.cpp)
   target_link_libraries(hftob_bench PRIVATE hftob benchmark::benchmark Threads::Threads)
+
+  # latency_json: per-ITCH-message-type decode-to-book latency histogram, emitted
+  # as a stable JSON document (CI artifact). Engine-only - no Google Benchmark dep.
+  add_executable(latency_json bench/latency_json.cpp)
+  target_link_libraries(latency_json PRIVATE hftob)
 endif()
 
 # ---- fuzzing (opt-in: -DHFTOB_BUILD_FUZZ=ON, clang only) ------------------
