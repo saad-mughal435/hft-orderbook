@@ -44,7 +44,7 @@ jobs:
         run: ./build/wsbook --dump 72 --synthetic 7200 > book-replay.ndjson
 
       - name: Upload replay artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: book-replay
           path: book-replay.ndjson
@@ -74,7 +74,7 @@ jobs:
           cat latency.json
 
       - name: Upload latency histogram artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: latency-histogram
           path: latency.json
