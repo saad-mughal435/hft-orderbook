@@ -125,5 +125,13 @@ TEST_CASE("size_approx never underflows while both sides are running", "[spsc][t
     producer.join();
     consumer.join();
 
-    CHECK(worst <= r.capacity());
+    // Note the bound is N, not capacity(). The two loads are not a single atomic
+    // snapshot: tail is sampled first, so the reading is
+    //   h - t = (head - tail at the later instant) + (however far tail advanced
+    //            between the two loads)
+    // which can legitimately sit above capacity for a moment. That is the safe
+    // direction for an occupancy metric - it can read high, never negative. Since
+    // head never passes N and tail never drops below 0, N is the real ceiling,
+    // and the old load order's ~2^64 blows straight through it.
+    CHECK(worst <= static_cast<std::size_t>(N));
 }

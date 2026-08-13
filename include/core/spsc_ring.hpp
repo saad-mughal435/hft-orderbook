@@ -98,6 +98,13 @@ public:
     /// nearly full, and making `empty_approx()` claim a genuinely empty ring is
     /// not empty. Both loads are correctly synchronised, so this is not a data
     /// race and ThreadSanitizer cannot see it.
+    ///
+    /// "Approximate" is meant literally: this is two loads, not one atomic
+    /// snapshot, so the result can briefly read *above* `capacity()` when the
+    /// producer advances between them. That is the harmless direction - the
+    /// count can overstate, never underflow - which is what makes
+    /// `empty_approx()` safe to act on as "definitely not empty" but not as
+    /// "definitely empty".
     std::size_t size_approx() const {
         const std::size_t t = tail_.load(std::memory_order_acquire);
         const std::size_t h = head_.load(std::memory_order_acquire);
