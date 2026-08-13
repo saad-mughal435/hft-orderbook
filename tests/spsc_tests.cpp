@@ -1,5 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <atomic>
+#include <cstddef>
 #include <thread>
 
 #include "core/spsc_ring.hpp"
@@ -83,4 +86,44 @@ TEST_CASE("concurrent producer/consumer transfer every item in order", "[spsc][t
 
     CHECK(ordered);
     CHECK(sum == static_cast<long long>(N - 1) * N / 2);
+}
+
+TEST_CASE("size_approx never underflows while both sides are running", "[spsc][thread]") {
+    // Regression. size_approx() used to load head_ before tail_. With both sides
+    // live, the consumer can advance tail_ past the head value already read, and
+    // `h - t` on unsigned size_t then wraps to ~2^64 - so a draining ring reports
+    // as nearly full and empty_approx() denies that an empty ring is empty.
+    //
+    // Both loads are correctly synchronised, so this is not a data race and the
+    // ThreadSanitizer job cannot see it. An invariant check is the only thing that
+    // catches it. Note this can only fail against the buggy load order: with tail
+    // read first, t <= h holds by construction, so there is nothing flaky here.
+    // Deliberately lower than the FIFO test above: this one adds a third (spinning)
+    // thread and the whole suite also runs under TSan and ASan.
+    constexpr int N = 100000;
+    SpscRing<int>     r(1024);
+    std::atomic<bool> drained{false};
+
+    std::thread producer([&] {
+        for (int i = 0; i < N; ++i)
+            while (!r.push(i)) std::this_thread::yield();
+    });
+
+    std::thread consumer([&] {
+        int v = 0;
+        for (int i = 0; i < N; ++i)
+            while (!r.pop(v)) std::this_thread::yield();
+        drained.store(true, std::memory_order_release);
+    });
+
+    // Third-party observer, i.e. how a metrics scrape actually reads this.
+    std::size_t worst = 0;
+    while (!drained.load(std::memory_order_acquire))
+        worst = std::max(worst, r.size_approx());
+    worst = std::max(worst, r.size_approx());
+
+    producer.join();
+    consumer.join();
+
+    CHECK(worst <= r.capacity());
 }

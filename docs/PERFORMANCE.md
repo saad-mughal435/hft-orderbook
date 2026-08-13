@@ -12,16 +12,23 @@ ones. This documents what's on the hot path and how to measure it for real.
 - **Branch-light decode** by explicit byte offsets - no packed-struct casts, no
   format-string parsing.
 - **Cache-line discipline.** The SPSC ring's `head`/`tail` are `alignas(64)` on
-  separate lines (no false sharing); each side caches the opposite index so the
-  steady-state path avoids a contended atomic load.
+  separate lines, so on x86-64 the two sides do not false-share; each side caches
+  the opposite index so the steady-state path avoids a contended atomic load.
+  (64 is the line size on x86-64 and most ARM, but it is not universal - Intel's
+  L2 adjacent-line prefetcher and Apple Silicon's 128-byte lines are why Folly and
+  DPDK pad to 128.)
 - **Price-tick-indexed book** (`WindowedLevels`): an order update is an O(1) array
   index, and the best quote is a tracked index - no tree walk.
 - **Busy-wait with `PAUSE`.** The lock-free ring spins with `cpu_relax()` (x86
   `pause`, `core/cpu.hpp`), not `yield()` - it keeps the core and is friendly to a
   hyperthread sibling.
-- **Lock-free / wait-free** SPSC hand-off, validated race-free by ThreadSanitizer;
-  **sharded** across cores by symbol (one SPSC ring per shard, no shared mutable
-  state between workers).
+- **Wait-free** SPSC hand-off - `push()`/`pop()` finish in a bounded number of
+  steps with no retry loop, which is strictly stronger than lock-free (the bound
+  holds because the ring only accepts trivially copyable elements). No races
+  observed under ThreadSanitizer, which is evidence rather than proof: TSan checks
+  the interleavings a run happens to take, not that the memory orderings are
+  strong enough. **Sharded** across cores by symbol (one SPSC ring per shard, no
+  shared mutable state between workers).
 
 ## Indicative numbers - relative, same CI runner, NOT HFT figures
 

@@ -9,7 +9,8 @@ UDP multicast transport - derives microstructure signals, and speaks **FIX 4.4**
 
 What's in here:
 
-- **Hot path** - lock-free/wait-free SPSC ring, `PAUSE` busy-wait, object-pooled and
+- **Hot path** - wait-free SPSC ring (bounded steps, no retry loop - strictly stronger than
+  lock-free), `PAUSE` busy-wait, object-pooled and
   integer-priced mutation path, a price-tick-indexed book. No allocation in steady state;
   the reasoning is in `docs/PERFORMANCE.md`.
 - **Market data in** - ITCH 5.0 decode (manual big-endian), the **MoldUDP64** UDP feed with
@@ -35,7 +36,7 @@ design both simpler and faster than a generic matching engine.
 
 | Module | Responsibility |
 | ------ | -------------- |
-| `core/`  | integer prices, `ObjectPool`, pluggable level stores (`MapLevels` / `FlatLevels` / `WindowedLevels`), `alignas(64)` lock-free SPSC ring, `cpu_relax`/`rdtsc`/`pin_this_thread`, latency histogram, SHA-1/base64 |
+| `core/`  | integer prices, `ObjectPool`, pluggable level stores (`MapLevels` / `FlatLevels` / `WindowedLevels`), `alignas(64)` wait-free SPSC ring, `cpu_relax`/`rdtsc`/`pin_this_thread`, latency histogram, SHA-1/base64 |
 | `itch/`  | ITCH 5.0 message decode (manual big-endian) |
 | `feed/`  | BinaryFILE deframer, **MoldUDP64** UDP feed framing + UDP socket, two-stage + **sharded** decode→book pipelines, dependency-free WebSocket codec, synthetic generators |
 | `book/`  | order-book reconstructor (pooled `order_ref → order`) + multi-symbol `BookSet` (by `stock_locate`) + **microstructure metrics** + **trade tape** (VWAP / OHLCV) |
@@ -96,7 +97,8 @@ indexed array windowed around the inside - the canonical L2 structure):
 | build a 10k-order book - `FlatLevels` (sorted vector) | ~89 ns/msg (≈11.3 M msg/s) |
 | build a 10k-order book - `WindowedLevels` (tick-indexed array) | **~71 ns/msg (≈14.0 M msg/s)** |
 
-The **windowed array wins** - ~24% faster than the `std::map` baseline on this run - because an order
+The **windowed array wins** - ~20% lower per-message cost than the `std::map` baseline on this run
+(89 -> 71 ns/msg), i.e. ~1.25x the throughput - because an order
 keyed by price tick is an O(1) array index (and the best quote is a tracked index), versus the tree's
 O(log n) per op. `MapLevels` and `FlatLevels` land close here; their *relative* order is not stable
 across runs (an earlier run had flat ~25% slower - the flat vector pays an O(n) tail-shift when the mid
@@ -105,7 +107,7 @@ ships all three, parity-tested (`map ≡ flat ≡ windowed`), so the trade-offs 
 
 A full **decode + book apply is well under 100 ns** on this runner - sub-microsecond per message.
 The hot path is allocation-free (object pool + reserved index), integer-priced, branch-light, and
-cache-line-disciplined; the lock-free ring busy-waits with `PAUSE` (`cpu_relax`), and the engine
+cache-line-disciplined; the wait-free ring busy-waits with `PAUSE` (`cpu_relax`), and the engine
 exposes `rdtsc` + `pin_this_thread` for a pinned bare-metal deployment. See
 **[`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)** for the hot-path design and the measurement method.
 
@@ -139,7 +141,12 @@ Every push runs, in GitHub Actions:
 
 - **build + test** (`ctest`, gcc) - unit, property/invariant, multi-symbol replay, and the MT5
   loopback bridge integration test
-- **ThreadSanitizer** over the SPSC / pipeline / bridge threads - the proof the lock-free ring is race-free
+- **ThreadSanitizer** over the SPSC / pipeline / bridge threads - no races observed across the CI
+  matrix. Worth being precise about what that does and does not buy: TSan is a *dynamic* detector, so
+  it only sees the interleavings a run actually executes, and it does not check that the memory
+  orderings are strong enough. A `relaxed` where `release` was required compiles to the same
+  instructions under x86-64's TSO and would pass here, then break on ARM. Verifying the orderings
+  themselves needs a model checker (CDSChecker, GenMC, Relacy) or herd7 litmus tests - not yet done
 - **AddressSanitizer + UndefinedBehaviorSanitizer** over the suite and a replay run
 - **clang `-Wall -Wextra -Wpedantic -Werror`** build of the library and tools
 - **libFuzzer** feeding arbitrary bytes through the deframer + decoder + book (ASan-checked)
